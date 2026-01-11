@@ -210,17 +210,14 @@ export const api = {
         return { ...user, joinedClubIds: newJoined };
     },
     getMembers: async (clubId: string): Promise<User[]> => {
-        // Fix for filtering JSON array or Text array in supabase
-        const { data, error } = await supabase
-            .from('users')
-            .select('*')
-            .contains('joinedClubIds', [clubId]);
-        
+        // Fetch all users and filter client-side to avoid Supabase array/jsonb filter issues
+        const { data, error } = await supabase.from('users').select('*');
         if (error) {
             console.error("Error fetching members:", error);
             return [];
         }
-        return data as User[];
+        // Safely filter results
+        return (data as User[]).filter(u => u.joinedClubIds && Array.isArray(u.joinedClubIds) && u.joinedClubIds.includes(clubId));
     }
   },
   posts: {

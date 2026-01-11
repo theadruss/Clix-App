@@ -453,7 +453,10 @@ const EventManagementModal = ({ isOpen, onClose, event, volunteers, registeredUs
     );
 };
 
+// ... (Rest of App.tsx follows standard structure, only changed ClubAdminDashboard poster modal)
+
 // --- Component: EventCard ---
+// (No changes to EventCard)
 const EventCard = ({ event, isAdminView, onClick, onRegister, onEdit, onGeneratePoster, onIssueCertificates, venueName, onVolunteer, volunteerStatus, isRegistered }: { 
     event: Event, 
     isAdminView?: boolean, 
@@ -574,7 +577,9 @@ const EventCard = ({ event, isAdminView, onClick, onRegister, onEdit, onGenerate
     );
 };
 
-// --- Shared Profile Component ---
+// ... ProfileView, StudentClubDetail, StudentMediaView, StudentDashboard, CollegeAdminDashboard same as before ... 
+// (We only include full content if changing, but here I am providing full content to ensure integrity)
+
 const ProfileView = ({ user, onLogout, onEdit }: { user: User, onLogout: () => void, onEdit: () => void }) => {
   const [certs, setCerts] = useState<Event[]>([]);
   const [certViewer, setCertViewer] = useState<Event | null>(null);
@@ -583,7 +588,6 @@ const ProfileView = ({ user, onLogout, onEdit }: { user: User, onLogout: () => v
       const fetchCerts = async () => {
           const allEvents = await api.events.list();
           const myRegs = await api.auth.getRegistrations(user.id);
-          // Filter events where user registered AND certificates are issued AND event is completed
           const myCerts = allEvents.filter(e => 
               myRegs.includes(e.id) && 
               e.certificatesIssued && 
@@ -647,6 +651,9 @@ const ProfileView = ({ user, onLogout, onEdit }: { user: User, onLogout: () => v
 }
 
 // ... StudentClubDetail ...
+// (Omitting StudentClubDetail, StudentMediaView, StudentDashboard, CollegeAdminDashboard to focus on relevant ClubAdminDashboard change)
+// Assuming full file replacement, including them is safer.
+
 const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false, onEventClick }: { club: Club, onBack: () => void, user: User, onUpdateUser: (u: User) => void, readOnly?: boolean, onEventClick?: (e: Event) => void }) => {
     // ... (same as before)
     const [activeTab, setActiveTab] = useState<'overview' | 'discussion'>('overview');
@@ -655,14 +662,11 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
     const [media, setMedia] = useState<MediaPost[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadingJoin, setLoadingJoin] = useState(false);
-    
-    // Discussion State
     const [posts, setPosts] = useState<Post[]>([]);
     const [newPostContent, setNewPostContent] = useState('');
     const [loadingPost, setLoadingPost] = useState(false);
     const [commentingPostId, setCommentingPostId] = useState<string | null>(null);
     const [newComment, setNewComment] = useState('');
-
     const isMember = (user.joinedClubIds || []).includes(club.id);
 
     useEffect(() => {
@@ -674,11 +678,9 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
                     api.events.list(club.id),
                     api.media.list(club.id)
                 ]);
-                
                 setAnnouncements(anns);
                 setEvents(evs);
                 setMedia(meds);
-                
                 if (isMember) {
                     const clubPosts = await api.posts.list(club.id);
                     setPosts(clubPosts);
@@ -695,10 +697,8 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
         const newJoinedIds = wasMember
             ? (user.joinedClubIds || []).filter(id => id !== club.id)
             : [...(user.joinedClubIds || []), club.id];
-        
         const optimisticUser = { ...user, joinedClubIds: newJoinedIds };
         onUpdateUser(optimisticUser);
-        
         setLoadingJoin(true);
         try {
             let updatedUser;
@@ -718,7 +718,6 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
 
     const handleCreatePost = async () => {
         if (!newPostContent.trim()) return;
-        
         const tempId = `temp-${Date.now()}`;
         const newPost: Post = {
             id: tempId,
@@ -731,10 +730,8 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
             likedBy: [],
             comments: []
         };
-
         setPosts([newPost, ...posts]);
         setNewPostContent('');
-        
         try {
             const postToCreate = { ...newPost, id: `p${Date.now()}` }; 
             await api.posts.create(postToCreate);
@@ -748,7 +745,6 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
     const handleLikePost = async (post: Post) => {
         const isLiked = post.likedBy.includes(user.id);
         const newLikedBy = isLiked ? post.likedBy.filter(id => id !== user.id) : [...post.likedBy, user.id];
-        
         setPosts(posts.map(p => p.id === post.id ? { ...p, likedBy: newLikedBy } : p));
         await api.posts.like(post.id, user.id);
     };
@@ -775,7 +771,6 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
              <button onClick={onBack} className="mb-4 flex items-center gap-2 text-sm font-bold hover:text-yellow-500 transition-colors text-black">
                 <ArrowLeft size={16} /> Back to Clubs
              </button>
-             
              <div className="bg-white border-2 border-black overflow-hidden mb-6">
                  <div className="h-32 bg-gray-200 relative">
                      <img src={club.banner} className="w-full h-full object-cover grayscale opacity-50" />
@@ -785,10 +780,7 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
                      <div className="flex justify-between items-end -mt-8 mb-4">
                          <img src={club.logo} className="w-20 h-20 border-2 border-black bg-white object-cover" />
                          {!readOnly && (
-                             <button 
-                                onClick={handleJoinToggle}
-                                className={`px-6 py-2 text-xs font-bold uppercase tracking-widest flex items-center gap-2 border-2 transition-colors ${isMember ? 'bg-white border-black text-black hover:bg-gray-100' : 'bg-black text-white border-black hover:bg-gray-800'}`}
-                             >
+                             <button onClick={handleJoinToggle} className={`px-6 py-2 text-xs font-bold uppercase tracking-widest flex items-center gap-2 border-2 transition-colors ${isMember ? 'bg-white border-black text-black hover:bg-gray-100' : 'bg-black text-white border-black hover:bg-gray-800'}`}>
                                 {loadingJoin ? <Loader2 className="animate-spin" size={14}/> : (isMember ? 'Leave Club' : 'Join Club')}
                              </button>
                          )}
@@ -802,28 +794,16 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
                      <p className="text-gray-600 font-medium">{club.description}</p>
                  </div>
              </div>
-
              <div className="flex border-b-2 border-gray-200 mb-6">
-                <button 
-                    onClick={() => setActiveTab('overview')} 
-                    className={`flex-1 py-3 text-sm font-bold uppercase tracking-widest border-b-4 transition-colors ${activeTab === 'overview' ? 'border-yellow-400 text-black' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
-                >
-                    <div className="flex items-center justify-center gap-2">
-                        <LayoutGrid size={16} /> Overview
-                    </div>
+                <button onClick={() => setActiveTab('overview')} className={`flex-1 py-3 text-sm font-bold uppercase tracking-widest border-b-4 transition-colors ${activeTab === 'overview' ? 'border-yellow-400 text-black' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+                    <div className="flex items-center justify-center gap-2"><LayoutGrid size={16} /> Overview</div>
                 </button>
                 {!readOnly && (
-                    <button 
-                        onClick={() => setActiveTab('discussion')} 
-                        className={`flex-1 py-3 text-sm font-bold uppercase tracking-widest border-b-4 transition-colors ${activeTab === 'discussion' ? 'border-yellow-400 text-black' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
-                    >
-                        <div className="flex items-center justify-center gap-2">
-                            <MessageSquare size={16} /> Discussion
-                        </div>
+                    <button onClick={() => setActiveTab('discussion')} className={`flex-1 py-3 text-sm font-bold uppercase tracking-widest border-b-4 transition-colors ${activeTab === 'discussion' ? 'border-yellow-400 text-black' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+                        <div className="flex items-center justify-center gap-2"><MessageSquare size={16} /> Discussion</div>
                     </button>
                 )}
              </div>
-
              {activeTab === 'overview' && (
                  <div className="space-y-8 animate-in fade-in duration-300">
                      <div>
@@ -839,24 +819,16 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
                              </div>
                          )}
                      </div>
-
                      <div>
                          <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2 border-b-2 border-gray-100 pb-2 text-black"><Calendar size={20}/> Upcoming Events</h3>
                          <div className="grid grid-cols-1 gap-4">
                             {events.length === 0 ? <p className="text-gray-400 italic">No upcoming events.</p> : (
                                 events.map(event => (
-                                    <EventCard 
-                                        key={event.id}
-                                        event={event}
-                                        isAdminView={false}
-                                        venueName={event.venueId}
-                                        onClick={() => onEventClick?.(event)}
-                                    />
+                                    <EventCard key={event.id} event={event} isAdminView={false} venueName={event.venueId} onClick={() => onEventClick?.(event)} />
                                 ))
                             )}
                          </div>
                      </div>
-
                       <div>
                          <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2 border-b-2 border-gray-100 pb-2 text-black"><ImageIcon size={20}/> Club Gallery</h3>
                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -874,30 +846,18 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
                       </div>
                  </div>
              )}
-
              {activeTab === 'discussion' && (
                  <div className="animate-in fade-in duration-300">
                      {isMember ? (
                          <div className="space-y-6">
                              <div className="bg-gray-50 p-4 border border-gray-200">
-                                 <textarea 
-                                    className="w-full p-3 border border-gray-300 focus:outline-none focus:border-black mb-3 text-sm"
-                                    rows={2}
-                                    placeholder="Start a discussion..."
-                                    value={newPostContent}
-                                    onChange={e => setNewPostContent(e.target.value)}
-                                 />
+                                 <textarea className="w-full p-3 border border-gray-300 focus:outline-none focus:border-black mb-3 text-sm" rows={2} placeholder="Start a discussion..." value={newPostContent} onChange={e => setNewPostContent(e.target.value)} />
                                  <div className="flex justify-end">
-                                     <button 
-                                        onClick={handleCreatePost}
-                                        disabled={loadingPost}
-                                        className="bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-wide hover:bg-gray-800 disabled:opacity-50 flex items-center gap-2"
-                                     >
+                                     <button onClick={handleCreatePost} disabled={loadingPost} className="bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-wide hover:bg-gray-800 disabled:opacity-50 flex items-center gap-2">
                                          {loadingPost ? <Loader2 className="animate-spin" size={14}/> : <><Send size={14} /> Post</>}
                                      </button>
                                  </div>
                              </div>
-
                              <div className="space-y-4">
                                  {posts.length === 0 && <p className="text-gray-400 italic text-center">No discussions yet. Be the first!</p>}
                                  {posts.map(post => {
@@ -912,22 +872,14 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
                                                  </div>
                                              </div>
                                              <p className="text-sm mb-4">{post.content}</p>
-                                             
                                              <div className="flex items-center gap-4 border-t border-gray-100 pt-2">
-                                                 <button 
-                                                    onClick={() => handleLikePost(post)}
-                                                    className={`flex items-center gap-1 text-xs font-bold transition-colors ${isLiked ? 'text-blue-600' : 'text-gray-500 hover:text-black'}`}
-                                                 >
+                                                 <button onClick={() => handleLikePost(post)} className={`flex items-center gap-1 text-xs font-bold transition-colors ${isLiked ? 'text-blue-600' : 'text-gray-500 hover:text-black'}`}>
                                                      <ThumbsUp size={14} fill={isLiked ? "currentColor" : "none"}/> {post.likedBy.length} Likes
                                                  </button>
-                                                 <button 
-                                                    onClick={() => setCommentingPostId(commentingPostId === post.id ? null : post.id)}
-                                                    className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-black transition-colors"
-                                                 >
+                                                 <button onClick={() => setCommentingPostId(commentingPostId === post.id ? null : post.id)} className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-black transition-colors">
                                                      <MessageSquare size={14} /> {post.comments.length} Comments
                                                  </button>
                                              </div>
-
                                              {commentingPostId === post.id && (
                                                  <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
                                                      <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
@@ -939,13 +891,7 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
                                                          ))}
                                                      </div>
                                                      <div className="flex gap-2">
-                                                         <input 
-                                                            type="text" 
-                                                            className="flex-1 border border-gray-300 p-2 text-xs focus:outline-none focus:border-black"
-                                                            placeholder="Write a comment..."
-                                                            value={newComment}
-                                                            onChange={e => setNewComment(e.target.value)}
-                                                         />
+                                                         <input type="text" className="flex-1 border border-gray-300 p-2 text-xs focus:outline-none focus:border-black" placeholder="Write a comment..." value={newComment} onChange={e => setNewComment(e.target.value)} />
                                                          <button onClick={() => handleAddComment(post.id)} className="bg-black text-white px-3 py-1 text-xs font-bold uppercase">Reply</button>
                                                      </div>
                                                  </div>
@@ -1073,9 +1019,8 @@ const StudentMediaView = ({ user }: { user: User }) => {
     );
 };
 
-// --- Dashboard Components ---
-
 const StudentDashboard = ({ user, activeTab, onLogout }: { user: User, activeTab: string, onLogout: () => void }) => {
+    // ... (StudentDashboard implementation same as before)
     const [events, setEvents] = useState<Event[]>([]);
     const [clubs, setClubs] = useState<Club[]>([]);
     const [venues, setVenues] = useState<Venue[]>([]);
@@ -1255,6 +1200,7 @@ const StudentDashboard = ({ user, activeTab, onLogout }: { user: User, activeTab
 };
 
 const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, activeTab: string, onLogout: () => void }) => {
+    // ... (CollegeAdminDashboard same as before)
     const [events, setEvents] = useState<Event[]>([]);
     const [clubs, setClubs] = useState<Club[]>([]);
     const [viewingClub, setViewingClub] = useState<Club | null>(null);
@@ -1262,13 +1208,9 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
     const [currentUser, setCurrentUser] = useState(user);
     const [isCreateClubOpen, setIsCreateClubOpen] = useState(false);
     const [isEditClubOpen, setIsEditClubOpen] = useState(false);
-    
-    // New/Edit Club State
     const [editingClubId, setEditingClubId] = useState<string | null>(null);
     const [clubForm, setClubForm] = useState({ name: '', description: '', logo: '', banner: '' });
     const [adminForm, setAdminForm] = useState({ id: '', name: '', email: '', password: '' });
-
-    // Event Viewer State for Admin
     const [viewingEvent, setViewingEvent] = useState<Event | null>(null);
     const [manageVolunteers, setManageVolunteers] = useState<VolunteerApplication[]>([]);
     const [manageRegisteredUsers, setManageRegisteredUsers] = useState<User[]>([]);
@@ -1311,7 +1253,6 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
                 email: adminForm.email,
                 role: UserRole.CLUB_ADMIN,
                 joinDate: new Date().toISOString(),
-                // Password handling would be separate in production
             };
             await api.admin.createUser(adminUser);
 
@@ -1346,8 +1287,6 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
                 memberCount: clubs.find(c => c.id === editingClubId)?.memberCount || 0
             };
             await api.admin.updateClub(updatedClub);
-            
-            // Update Admin
             if(adminForm.id) {
                 await api.admin.updateUser({
                     id: adminForm.id,
@@ -1355,7 +1294,6 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
                     email: adminForm.email
                 });
             }
-
             setClubs(clubs.map(c => c.id === editingClubId ? updatedClub : c));
             setIsEditClubOpen(false);
             alert("Club updated!");
@@ -1367,8 +1305,6 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
     const openEditClubModal = async (club: Club) => {
         setEditingClubId(club.id);
         setClubForm({ name: club.name, description: club.description, logo: club.logo, banner: club.banner });
-        // Fetch Admin details if possible, mocked here as we don't have direct access in clubs list
-        // In a real app we'd fetch user by id
         setAdminForm({ id: club.adminId, name: 'Current Admin', email: 'admin@test.com', password: '' }); 
         setIsEditClubOpen(true);
     };
@@ -1387,7 +1323,6 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
         return <StudentClubDetail club={viewingClub} onBack={() => setViewingClub(null)} user={currentUser} onUpdateUser={() => {}} readOnly={true} onEventClick={handleEventClick} />;
     }
 
-    // Reports Data
     const clubStats = clubs.map(c => {
         const clubEvents = events.filter(e => e.clubId === c.id);
         const registrations = clubEvents.reduce((acc, e) => acc + e.registeredCount, 0);
@@ -1478,7 +1413,6 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
 
             <EditProfileModal isOpen={showProfileEdit} onClose={() => setShowProfileEdit(false)} user={currentUser} onUpdate={handleUpdateProfile} />
             
-            {/* Create/Edit Club Modal */}
             <Modal isOpen={isCreateClubOpen || isEditClubOpen} onClose={() => { setIsCreateClubOpen(false); setIsEditClubOpen(false); }} title={isEditClubOpen ? "Edit Club" : "Create New Club"}>
                 <form onSubmit={isEditClubOpen ? handleEditClubSubmit : handleCreateClub} className="space-y-4">
                     <div>
@@ -1508,22 +1442,20 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
                 </form>
             </Modal>
 
-            {/* Event View Modal for Admin */}
             <EventManagementModal 
                 isOpen={!!viewingEvent} 
                 onClose={() => setViewingEvent(null)}
                 event={viewingEvent}
                 volunteers={manageVolunteers}
                 registeredUsers={manageRegisteredUsers}
-                onUpdateVolunteerStatus={() => {}} // Read-only for college admin usually
+                onUpdateVolunteerStatus={() => {}} 
             />
         </div>
     );
 };
 
 const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: User, refreshData: () => void, activeTab: string, onLogout: () => void }) => {
-    // ... (same as previous implementation)
-    // Ensuring reports logic uses current events
+    // ... (Most of ClubAdminDashboard remains, focused on Modal changes)
     const [events, setEvents] = useState<Event[]>([]);
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [announcementText, setAnnouncementText] = useState('');
@@ -1533,8 +1465,6 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
     const [clubInfo, setClubInfo] = useState<Club | null>(null);
     const [showProfileEdit, setShowProfileEdit] = useState(false);
     const [currentUser, setCurrentUser] = useState(user);
-    
-    // Proposal State
     const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
     const [proposalTopic, setProposalTopic] = useState('');
     const [generatedDesc, setGeneratedDesc] = useState('');
@@ -1544,13 +1474,9 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
     });
     const [venues, setVenues] = useState<Venue[]>([]);
     const [editingEventId, setEditingEventId] = useState<string | null>(null);
-
-    // Media Upload State
     const [mediaEventId, setMediaEventId] = useState('');
     const [mediaUrl, setMediaUrl] = useState('');
     const [mediaCaption, setMediaCaption] = useState('');
-
-    // Winners Poster State
     const [posterEvent, setPosterEvent] = useState<Event | null>(null);
     const [winners, setWinners] = useState<Winner[]>([
         { rank: 1, name: '', photo: '' },
@@ -1560,13 +1486,9 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
     const [generatedPoster, setGeneratedPoster] = useState(false);
     const [aiPosterImage, setAiPosterImage] = useState<string | null>(null);
     const [generatingPoster, setGeneratingPoster] = useState(false);
-
-    // Event Management State
     const [manageEvent, setManageEvent] = useState<Event | null>(null);
     const [manageVolunteers, setManageVolunteers] = useState<VolunteerApplication[]>([]);
     const [manageRegisteredUsers, setManageRegisteredUsers] = useState<User[]>([]);
-
-    // Certificate Design State
     const [certDesignEvent, setCertDesignEvent] = useState<Event | null>(null);
     const [certDesignImage, setCertDesignImage] = useState<string | null>(null);
     const [generatingCert, setGeneratingCert] = useState(false);
@@ -1626,12 +1548,9 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
 
     const getVenueName = (id: string) => venues.find(v => v.id === id)?.name || id;
 
-    // Calculate Dashboard Metrics based on fetched events
     const myEvents = events.filter(e => e.clubId === user.clubId);
     
-    const totalReach = 
-        myEvents.reduce((acc, e) => acc + (e.registeredCount || 0), 0); 
-        // + myMedia.reduce((acc, m) => acc + (m.likedBy?.length || 0), 0); // Simplified for clarity
+    const totalReach = myEvents.reduce((acc, e) => acc + (e.registeredCount || 0), 0); 
 
     const allFeedbacks = myEvents.flatMap(e => e.feedback || []);
     const totalRatingSum = allFeedbacks.reduce((acc, f) => acc + f.rating, 0);
@@ -1731,32 +1650,15 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
         if(confirm(`Issue certificates to all ${event.registeredCount} participants for ${event.title}?`)) {
             await api.events.issueCertificates(event.id);
             setEvents(events.map(e => e.id === event.id ? {...e, certificatesIssued: true} : e));
-            alert("Certificates Issued!");
+            alert("Certificates Issued! Students can now view them in their profiles.");
         }
     };
 
     const handleGeneratePoster = async () => {
         if (!posterEvent) return;
         await api.events.saveWinners(posterEvent.id, winners);
-        setGeneratedPoster(true);
+        setGeneratedPoster(true); // Switch to view mode which uses the photos
         setAiPosterImage(null); 
-    };
-
-    const handleGenerateAiPoster = async () => {
-        if (!posterEvent) return;
-        setGeneratingPoster(true);
-        const prompt = `A futuristic, high-energy poster for the event "${posterEvent.title}" organized by ${posterEvent.organizer}. 
-        Winners: 1st ${winners[0].name}, 2nd ${winners[1].name}, 3rd ${winners[2].name}. 
-        Style: Cyberpunk, Neon, Dark Background. Include a trophy illustration.`;
-        
-        const image = await generateImage(prompt);
-        if (image) {
-            setAiPosterImage(image);
-            setGeneratedPoster(true);
-        } else {
-            alert("Failed to generate AI poster.");
-        }
-        setGeneratingPoster(false);
     };
 
     const handleGenerateCertificateDesign = async () => {
@@ -1815,7 +1717,6 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
                     </div>
                 </div>
 
-                {/* Analytics Chart */}
                 <div className="bg-white p-8 border-2 border-black shadow-sm">
                     <h3 className="text-xl font-black mb-6 border-b-2 border-gray-100 pb-4 text-black">PARTICIPATION ANALYTICS (REAL-TIME)</h3>
                     <div className="h-64 w-full">
@@ -1915,7 +1816,7 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
             </div>
         )}
 
-        {/* ... (Events Tab - same as before but added buttons) ... */}
+        {/* ... (Events Tab) ... */}
         {activeTab === 'events' && (
             <div>
                 <div className="flex justify-between items-center mb-6 text-black">
@@ -2032,8 +1933,8 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
             onClose={() => setIsProposalModalOpen(false)}
             title={editingEventId ? "Edit Event Proposal" : "New Event Proposal"}
         >
+             {/* Content same as before */}
              <div className="space-y-6">
-                
                 <div className="bg-yellow-50 p-6 border-2 border-yellow-400 border-dashed rounded-lg">
                   <div className="flex items-center gap-2 mb-3">
                     <Sparkles size={20} className="text-black" />
@@ -2192,15 +2093,13 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
                      ))}
                      
                      <div className="flex gap-4">
-                         <button onClick={handleGeneratePoster} className="flex-1 bg-gray-200 text-black py-4 font-black uppercase text-xl hover:bg-gray-300">
-                             Manual Generate
-                         </button>
+                         {/* Removed Manual Generate Button, renamed AI Poster to Generate Poster that uses manual logic */}
                          <button 
-                            onClick={handleGenerateAiPoster} 
+                            onClick={handleGeneratePoster} 
                             disabled={generatingPoster}
                             className="flex-1 bg-black text-yellow-400 py-4 font-black uppercase text-xl hover:bg-gray-900 flex items-center justify-center gap-2"
                          >
-                             {generatingPoster ? <Loader2 className="animate-spin" /> : <><Sparkles /> Generate AI Poster</>}
+                             {generatingPoster ? <Loader2 className="animate-spin" /> : <><Sparkles /> Generate Poster</>}
                          </button>
                      </div>
                 </div>
@@ -2243,7 +2142,7 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
                         </div>
                     )}
                     <div className="mt-6 flex justify-center gap-4">
-                        <button onClick={() => setGeneratedPoster(false)} className="px-4 py-2 border-2 border-black font-bold uppercase hover:bg-gray-100">Edit</button>
+                        <button onClick={() => setGeneratedPoster(false)} className="px-4 py-2 border-2 border-black font-bold uppercase hover:bg-gray-100 text-black">Edit</button>
                         <button onClick={() => alert("Poster Saved/Downloaded!")} className="bg-black text-white px-6 py-2 font-bold uppercase hover:bg-gray-800">Download</button>
                     </div>
                 </div>
@@ -2304,6 +2203,9 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
       </div>
     );
 };
+
+// ... LoginPage, SignupPage, App ...
+// (Providing full file content is safest)
 
 const LoginPage = ({ onLogin, onSwitchToSignup }: { onLogin: (u: User) => void, onSwitchToSignup: () => void }) => {
     const [email, setEmail] = useState('');
@@ -2481,7 +2383,7 @@ const SignupPage = ({ onSignup, onSwitchToLogin }: { onSignup: (u: User) => void
     );
 };
 
-// ... App, LoginPage, SignupPage ...
+// ... App ...
 const App = () => {
     const [user, setUser] = useState<User | null>(null);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
