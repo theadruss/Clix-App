@@ -6,16 +6,19 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "lint": "tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
     "@google/genai": "^1.35.0",
+    "@supabase/supabase-js": "2.39.7",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.0",
     "lucide-react": "0.453.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "recharts": "2.12.2",
     "react-qr-code": "2.0.12",
-    "@supabase/supabase-js": "2.39.7"
+    "recharts": "2.12.2"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

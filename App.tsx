@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import QRCode from "react-qr-code";
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 // --- Helpers ---
 
@@ -112,13 +114,29 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, large =
 
 const PaymentModal = ({ isOpen, onClose, event, onConfirm }: { isOpen: boolean, onClose: () => void, event: Event | null, onConfirm: () => void }) => {
     const [processing, setProcessing] = useState(false);
+    const [success, setSuccess] = useState(false);
 
     const handlePay = () => {
         setProcessing(true);
         setTimeout(() => {
             setProcessing(false);
+            setSuccess(true);
             onConfirm();
         }, 1500); 
+    };
+
+    const handleDownloadReceipt = () => {
+        if (!event) return;
+        const doc = new jsPDF();
+        doc.setFontSize(20);
+        doc.text("Payment Receipt", 20, 20);
+        doc.setFontSize(12);
+        doc.text(`Event: ${event.title}`, 20, 40);
+        doc.text(`Amount: ₹${event.price}`, 20, 50);
+        doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 60);
+        doc.text(`Transaction ID: TXN${Date.now()}`, 20, 70);
+        doc.text("Status: Paid", 20, 80);
+        doc.save("Receipt.pdf");
     };
 
     if (!isOpen || !event) return null;
@@ -126,42 +144,64 @@ const PaymentModal = ({ isOpen, onClose, event, onConfirm }: { isOpen: boolean, 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Secure Payment">
             <div className="text-center space-y-8 py-4">
-                <div className="bg-gray-50 p-6 border border-gray-200 rounded-lg">
-                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mb-2">Total Amount</p>
-                    <p className="text-5xl font-black mb-1">₹{event.price}</p>
-                    <p className="text-sm font-bold text-gray-400">for {event.title}</p>
-                </div>
-                
-                <div className="space-y-3">
-                    <p className="font-bold text-sm uppercase text-left mb-2">Select Payment Method</p>
-                    <button 
-                        onClick={handlePay}
-                        disabled={processing}
-                        className="w-full flex items-center justify-between p-4 border-2 border-black hover:bg-yellow-50 transition group"
-                    >
-                        <div className="flex items-center gap-3">
-                            <div className="bg-black text-white p-2 rounded">
-                                <Smartphone size={20} />
-                            </div>
-                            <span className="font-bold">UPI / GPay / PhonePe</span>
+                {!success ? (
+                    <>
+                        <div className="bg-gray-50 p-6 border border-gray-200 rounded-lg">
+                            <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mb-2">Total Amount</p>
+                            <p className="text-5xl font-black mb-1">₹{event.price}</p>
+                            <p className="text-sm font-bold text-gray-400">for {event.title}</p>
                         </div>
-                        <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform"/>
-                    </button>
-                    
-                    <button disabled className="w-full flex items-center justify-between p-4 border-2 border-gray-200 text-gray-400 cursor-not-allowed">
-                         <div className="flex items-center gap-3">
-                            <div className="bg-gray-200 text-gray-400 p-2 rounded">
-                                <DollarSign size={20} />
-                            </div>
-                            <span className="font-bold">Credit/Debit Card (Coming Soon)</span>
+                        
+                        <div className="space-y-3">
+                            <p className="font-bold text-sm uppercase text-left mb-2">Select Payment Method</p>
+                            <button 
+                                onClick={handlePay}
+                                disabled={processing}
+                                className="w-full flex items-center justify-between p-4 border-2 border-black hover:bg-yellow-50 transition group"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-black text-white p-2 rounded">
+                                        <Smartphone size={20} />
+                                    </div>
+                                    <span className="font-bold">UPI / GPay / PhonePe</span>
+                                </div>
+                                <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform"/>
+                            </button>
+                            
+                            <button disabled className="w-full flex items-center justify-between p-4 border-2 border-gray-200 text-gray-400 cursor-not-allowed">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-gray-200 text-gray-400 p-2 rounded">
+                                        <DollarSign size={20} />
+                                    </div>
+                                    <span className="font-bold">Credit/Debit Card (Coming Soon)</span>
+                                </div>
+                            </button>
                         </div>
-                    </button>
-                </div>
 
-                {processing && (
-                    <div className="flex flex-col items-center justify-center text-yellow-500 animate-pulse">
-                        <Loader2 className="animate-spin mb-2" size={32} />
-                        <span className="font-bold text-xs uppercase tracking-widest">Processing Payment...</span>
+                        {processing && (
+                            <div className="flex flex-col items-center justify-center text-yellow-500 animate-pulse">
+                                <Loader2 className="animate-spin mb-2" size={32} />
+                                <span className="font-bold text-xs uppercase tracking-widest">Processing Payment...</span>
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    <div className="space-y-6 animate-in zoom-in duration-300">
+                        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto border-4 border-green-500 text-green-600">
+                            <Check size={40} strokeWidth={4} />
+                        </div>
+                        <div>
+                            <h3 className="text-2xl font-black uppercase">Payment Successful!</h3>
+                            <p className="text-gray-500 font-medium">You are now registered for {event.title}</p>
+                        </div>
+                        <div className="flex gap-4 justify-center">
+                            <button onClick={handleDownloadReceipt} className="bg-black text-white px-6 py-3 font-bold uppercase hover:bg-gray-800 flex items-center gap-2">
+                                <Download size={18} /> Receipt
+                            </button>
+                            <button onClick={onClose} className="border-2 border-black px-6 py-3 font-bold uppercase hover:bg-gray-100">
+                                Close
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
@@ -205,9 +245,28 @@ const TicketQRModal = ({ isOpen, onClose, event, user }: { isOpen: boolean, onCl
 
 const CertificateModal = ({ isOpen, onClose, event, user }: { isOpen: boolean, onClose: () => void, event: Event | null, user: User }) => {
     if (!isOpen || !event) return null;
+
+    const handleDownload = async () => {
+        const element = document.getElementById('certificate-content');
+        if (!element) return;
+        
+        try {
+            const canvas = await html2canvas(element, { scale: 2 });
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('l', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`${user.name}-Certificate.pdf`);
+        } catch (e) {
+            console.error("Certificate generation failed", e);
+            alert("Failed to generate certificate. Please try again.");
+        }
+    };
+
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Certificate of Completion" large>
-            <div className="bg-white p-10 border-8 border-double border-yellow-400 text-center relative overflow-hidden">
+            <div id="certificate-content" className="bg-white p-10 border-8 border-double border-yellow-400 text-center relative overflow-hidden">
                 <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
                      <Award size={400} />
                 </div>
@@ -232,7 +291,7 @@ const CertificateModal = ({ isOpen, onClose, event, user }: { isOpen: boolean, o
                         </div>
                     </div>
                      <div className="mt-12">
-                         <button onClick={() => alert("Downloaded Certificate!")} className="bg-black text-white px-6 py-3 font-bold uppercase tracking-widest hover:bg-gray-800 flex items-center gap-2 mx-auto">
+                         <button onClick={handleDownload} className="bg-black text-white px-6 py-3 font-bold uppercase tracking-widest hover:bg-gray-800 flex items-center gap-2 mx-auto">
                             <Download size={18} /> Download PDF
                          </button>
                     </div>
@@ -338,6 +397,17 @@ const EventManagementModal = ({ isOpen, onClose, event, volunteers, registeredUs
         setGeneratingReport(false);
     };
 
+    const handleDownloadReport = () => {
+        if (!report) return;
+        const blob = new Blob([report], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${event.title}-Report.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
     if (!isOpen || !event) return null;
     
     return (
@@ -417,13 +487,23 @@ const EventManagementModal = ({ isOpen, onClose, event, volunteers, registeredUs
                 <div className="border-t-2 border-gray-100 pt-6">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-black uppercase text-black">Post-Event Analysis</h3>
-                        <button onClick={handleGenerateReport} disabled={generatingReport} className="bg-black text-white px-4 py-2 text-xs font-bold uppercase hover:bg-gray-800 flex items-center gap-2">
-                            {generatingReport ? <Loader2 className="animate-spin" size={14}/> : <><ReportIcon size={14} /> Generate AI Report</>}
-                        </button>
+                        <div className="flex gap-2">
+                            <button onClick={handleGenerateReport} disabled={generatingReport} className="bg-black text-white px-4 py-2 text-xs font-bold uppercase hover:bg-gray-800 flex items-center gap-2">
+                                {generatingReport ? <Loader2 className="animate-spin" size={14}/> : <><ReportIcon size={14} /> Generate AI Report</>}
+                            </button>
+                            {report && (
+                                <button 
+                                    onClick={handleDownloadReport}
+                                    className="bg-white border-2 border-black text-black px-4 py-2 text-xs font-bold uppercase hover:bg-gray-100 flex items-center gap-2"
+                                >
+                                    <Download size={14} /> Download
+                                </button>
+                            )}
+                        </div>
                     </div>
                     {report && (
-                        <div className="bg-yellow-50 border-2 border-yellow-400 p-4 mb-6 max-h-60 overflow-y-auto text-black">
-                            <pre className="whitespace-pre-wrap font-sans text-sm">{report}</pre>
+                        <div className="bg-white border-2 border-black p-6 mb-6 max-h-60 overflow-y-auto shadow-sm text-black">
+                            <pre className="whitespace-pre-wrap font-sans text-base font-medium text-gray-800 leading-relaxed">{report}</pre>
                         </div>
                     )}
                     <h4 className="font-bold text-sm uppercase text-gray-500 mb-2">Student Feedback</h4>
@@ -472,12 +552,13 @@ const EventCard = ({ event, isAdminView, onClick, onRegister, onEdit, onGenerate
         const shareData = {
             title: event.title,
             text: `Check out ${event.title} by ${event.organizer}!`,
-            url: window.location.href // In a real app this would be specific link
+            url: window.location.href
         };
         if (navigator.share) {
             navigator.share(shareData).catch(console.error);
         } else {
-            alert(`Share link copied: ${shareData.url}`);
+            navigator.clipboard.writeText(`${shareData.title}\n${shareData.text}\n${shareData.url}`);
+            alert("Link copied to clipboard!");
         }
     };
 
@@ -1988,7 +2069,7 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
         >
              {/* Content same as before */}
              <div className="space-y-6">
-                <div className="bg-yellow-50 p-6 border-2 border-yellow-400 border-dashed rounded-lg">
+                <div className="bg-white p-6 border-2 border-black shadow-sm rounded-lg">
                   <div className="flex items-center gap-2 mb-3">
                     <Sparkles size={20} className="text-black" />
                     <h3 className="text-sm font-black uppercase tracking-wider text-black">AI Content Architect</h3>
