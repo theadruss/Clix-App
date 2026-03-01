@@ -16,6 +16,8 @@ import QRCode from "react-qr-code";
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
+import { Html5QrcodeScanner } from "html5-qrcode";
+
 // --- Helpers ---
 
 const ImageUpload = ({ label, onImageSelected, currentImage }: { label: string, onImageSelected: (base64: string) => void, currentImage?: string }) => {
@@ -370,20 +372,86 @@ const FeedbackModal = ({ isOpen, onClose, event, onSubmit }: { isOpen: boolean, 
     );
 };
 
-const EventManagementModal = ({ isOpen, onClose, event, volunteers, registeredUsers, onUpdateVolunteerStatus }: { 
+const EventManagementModal = ({ isOpen, onClose, event, volunteers, registeredUsers, onUpdateVolunteerStatus, onIssueCertificates }: { 
     isOpen: boolean; 
     onClose: () => void; 
     event: Event | null; 
     volunteers: VolunteerApplication[];
     registeredUsers: User[]; 
     onUpdateVolunteerStatus: (appId: string, status: VolunteerStatus) => void;
+    onIssueCertificates?: (event: Event) => void;
 }) => {
     const [report, setReport] = useState<string | null>(null);
     const [generatingReport, setGeneratingReport] = useState(false);
+    const [attendedUsers, setAttendedUsers] = useState<string[]>([]);
+    const [scanning, setScanning] = useState(false);
 
     useEffect(() => {
         setReport(null);
+        setAttendedUsers([]);
+        setScanning(false);
     }, [event?.id]);
+
+    useEffect(() => {
+        if (scanning && event) {
+            const scanner = new Html5QrcodeScanner(
+                "reader",
+                { fps: 10, qrbox: { width: 250, height: 250 } },
+                /* verbose= */ false
+            );
+            scanner.render((decodedText) => {
+                // Assume decodedText is userId or ticketId. For now check if user exists in registeredUsers
+                const user = registeredUsers.find(u => u.id === decodedText || decodedText.includes(u.id));
+                if (user) {
+                    if (!attendedUsers.includes(user.id)) {
+                        setAttendedUsers(prev => [...prev, user.id]);
+                        alert(`Verified: ${user.name}`);
+                    } else {
+                        alert(`Already verified: ${user.name}`);
+                    }
+                } else {
+                    alert("Invalid Ticket or User not registered.");
+                }
+            }, (error) => {
+                // console.warn(error);
+            });
+
+            return () => {
+                scanner.clear().catch(error => console.error("Failed to clear scanner", error));
+            };
+        }
+    }, [scanning, registeredUsers, attendedUsers, event]);
+
+    const handleDownloadParticipants = () => {
+        if (!event) return;
+        const doc = new jsPDF();
+        doc.setFontSize(18);
+        doc.text(`Participant List: ${event.title}`, 20, 20);
+        doc.setFontSize(12);
+        doc.text(`Date: ${event.date}`, 20, 30);
+        
+        let y = 40;
+        doc.text("Name", 20, y);
+        doc.text("Email", 80, y);
+        doc.text("Status", 150, y);
+        y += 10;
+        doc.line(20, y-5, 190, y-5);
+
+        registeredUsers.forEach(user => {
+            if (attendedUsers.includes(user.id)) {
+                doc.text(user.name, 20, y);
+                doc.text(user.email, 80, y);
+                doc.text("Attended", 150, y);
+                y += 10;
+            }
+        });
+
+        if (attendedUsers.length === 0) {
+            doc.text("No attendees marked yet.", 20, y);
+        }
+
+        doc.save(`${event.title}-Participants.pdf`);
+    };
 
     const handleGenerateReport = async () => {
         if(!event) return;
@@ -462,7 +530,30 @@ const EventManagementModal = ({ isOpen, onClose, event, volunteers, registeredUs
                     </div>
 
                     <div className="flex-1">
-                        <h3 className="text-lg font-black uppercase mb-4 border-b-2 border-black pb-2 text-black">Registered Students</h3>
+                        <div className="flex justify-between items-center mb-4 border-b-2 border-black pb-2">
+                            <h3 className="text-lg font-black uppercase text-black">Registered Students</h3>
+                            <div className="flex gap-2">
+                                {event && new Date(event.date) >= new Date() && (
+                                    <button 
+                                        onClick={() => setScanning(!scanning)} 
+                                        className={`px-3 py-1 text-xs font-bold uppercase flex items-center gap-2 ${scanning ? 'bg-red-500 text-white' : 'bg-black text-white'}`}
+                                    >
+                                        <QrCode size={14} /> {scanning ? 'Stop Scan' : 'Scan QR'}
+                                    </button>
+                                )}
+                                <button onClick={handleDownloadParticipants} className="border-2 border-black px-3 py-1 text-xs font-bold uppercase hover:bg-gray-100 flex items-center gap-2">
+                                    <Download size={14} /> List
+                                </button>
+                            </div>
+                        </div>
+                        
+                        {scanning && (
+                            <div className="mb-4 p-4 bg-black">
+                                <div id="reader" className="w-full"></div>
+                                <p className="text-white text-center text-xs mt-2">Point camera at student ticket QR</p>
+                            </div>
+                        )}
+
                         <div className="space-y-2 max-h-64 overflow-y-auto bg-gray-50 p-2">
                              {registeredUsers.length === 0 ? <p className="text-gray-500 text-sm italic">No registrations found.</p> :
                               registeredUsers.map(user => (
@@ -476,7 +567,10 @@ const EventManagementModal = ({ isOpen, onClose, event, volunteers, registeredUs
                                               <p className="text-[10px] text-gray-500">{user.year} • {user.branch}</p>
                                           </div>
                                       </div>
-                                      <span className="text-xs text-gray-500">{user.email}</span>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-gray-500">{user.email}</span>
+                                        {attendedUsers.includes(user.id) && <Check size={16} className="text-green-600" strokeWidth={3} />}
+                                      </div>
                                   </div>
                               ))
                              }
@@ -488,6 +582,14 @@ const EventManagementModal = ({ isOpen, onClose, event, volunteers, registeredUs
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-black uppercase text-black">Post-Event Analysis</h3>
                         <div className="flex gap-2">
+                            {onIssueCertificates && (
+                                <button 
+                                    onClick={() => event && onIssueCertificates(event)}
+                                    className="bg-yellow-400 text-black px-4 py-2 text-xs font-bold uppercase border border-black hover:bg-yellow-500 flex items-center gap-2"
+                                >
+                                    <Award size={14} /> Issue Certificates
+                                </button>
+                            )}
                             <button onClick={handleGenerateReport} disabled={generatingReport} className="bg-black text-white px-4 py-2 text-xs font-bold uppercase hover:bg-gray-800 flex items-center gap-2">
                                 {generatingReport ? <Loader2 className="animate-spin" size={14}/> : <><ReportIcon size={14} /> Generate AI Report</>}
                             </button>
@@ -925,13 +1027,14 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
                          <div className="grid grid-cols-1 gap-4">
                             {events.length === 0 ? <p className="text-gray-400 italic">No upcoming events.</p> : (
                                 events.map(event => (
-                                    <EventCard 
-                                        key={event.id}
-                                        event={event}
-                                        isAdminView={false}
-                                        venueName={event.venueId}
-                                        onClick={() => onEventClick?.(event)}
-                                    />
+                                    <div key={event.id}>
+                                        <EventCard 
+                                            event={event}
+                                            isAdminView={false}
+                                            venueName={event.venueId}
+                                            onClick={() => onEventClick?.(event)}
+                                        />
+                                    </div>
                                 ))
                             )}
                          </div>
@@ -1169,6 +1272,12 @@ const StudentDashboard = ({ user, activeTab, onLogout }: { user: User, activeTab
     const [showProfileEdit, setShowProfileEdit] = useState(false);
     const [currentUser, setCurrentUser] = useState(user);
     const [feedbackEvent, setFeedbackEvent] = useState<Event | null>(null);
+    const [showFilter, setShowFilter] = useState(false);
+    const [filterCategory, setFilterCategory] = useState("All");
+
+    useEffect(() => {
+        setViewingClub(null);
+    }, [activeTab]);
 
     useEffect(() => {
         api.events.list().then(setEvents);
@@ -1239,7 +1348,15 @@ const StudentDashboard = ({ user, activeTab, onLogout }: { user: User, activeTab
         return <StudentClubDetail club={viewingClub} onBack={() => setViewingClub(null)} user={currentUser} onUpdateUser={setCurrentUser} />;
     }
 
-    const filteredEvents = events.filter(e => e.status === EventStatus.APPROVED && e.title.toLowerCase().includes(searchQuery.toLowerCase()));
+    const filteredEvents = events.filter(e => {
+        const isApproved = e.status === EventStatus.APPROVED;
+        const matchesSearch = e.title.toLowerCase().includes(searchQuery.toLowerCase());
+        const isUpcoming = new Date(e.date + 'T' + e.time) >= new Date();
+        const matchesCategory = filterCategory === "All" || e.tags.includes(filterCategory);
+        return isApproved && matchesSearch && isUpcoming && matchesCategory;
+    });
+
+    const categories = ["All", "Tech", "Cultural", "Sports", "Workshop", "Seminar"];
 
     return (
         <div className="space-y-6">
@@ -1247,7 +1364,7 @@ const StudentDashboard = ({ user, activeTab, onLogout }: { user: User, activeTab
                 <div className="space-y-6">
                      <div className="flex justify-between items-end text-black">
                          <h2 className="text-3xl font-black uppercase italic tracking-tighter">Whats <br/><span className="text-yellow-400">On?</span></h2>
-                         <div className="flex gap-2">
+                         <div className="flex gap-2 relative">
                              <div className="relative">
                                  <Search className="absolute left-2 top-2.5 text-gray-400" size={16} />
                                  <input 
@@ -1258,20 +1375,38 @@ const StudentDashboard = ({ user, activeTab, onLogout }: { user: User, activeTab
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                  />
                              </div>
-                             <button className="bg-black text-white p-2 border-2 border-black hover:bg-gray-800 transition-colors"><Filter size={20} /></button>
+                             <button onClick={() => setShowFilter(!showFilter)} className={`bg-black text-white p-2 border-2 border-black hover:bg-gray-800 transition-colors ${showFilter ? 'bg-yellow-400 text-black' : ''}`}><Filter size={20} /></button>
+                             
+                             {showFilter && (
+                                 <div className="absolute top-12 right-0 bg-white border-2 border-black shadow-[4px_4px_0px_#000] z-10 w-40 p-2 animate-in fade-in zoom-in-95">
+                                     <p className="text-xs font-bold uppercase text-gray-500 mb-2">Filter By Category</p>
+                                     <div className="space-y-1">
+                                         {categories.map(cat => (
+                                             <button 
+                                                key={cat} 
+                                                onClick={() => { setFilterCategory(cat); setShowFilter(false); }}
+                                                className={`w-full text-left px-2 py-1 text-xs font-bold uppercase hover:bg-yellow-50 ${filterCategory === cat ? 'bg-yellow-400 text-black' : 'text-gray-600'}`}
+                                             >
+                                                 {cat}
+                                             </button>
+                                         ))}
+                                     </div>
+                                 </div>
+                             )}
                          </div>
                      </div>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                         {filteredEvents.map(event => (
-                             <EventCard 
-                                key={event.id} 
-                                event={event} 
-                                onRegister={() => handleRegister(event)} 
-                                isRegistered={myTickets.includes(event.id)}
-                                onVolunteer={handleVolunteer}
-                                volunteerStatus={userVol.find(v => v.eventId === event.id)?.status}
-                                venueName={getVenueName(event.venueId)}
-                             />
+                         {filteredEvents.length === 0 ? <p className="text-gray-500 italic">No upcoming events found.</p> : filteredEvents.map(event => (
+                             <div key={event.id}>
+                                 <EventCard 
+                                    event={event} 
+                                    onRegister={() => handleRegister(event)} 
+                                    isRegistered={myTickets.includes(event.id)}
+                                    onVolunteer={handleVolunteer}
+                                    volunteerStatus={userVol.find(v => v.eventId === event.id)?.status}
+                                    venueName={getVenueName(event.venueId)}
+                                 />
+                             </div>
                          ))}
                      </div>
                 </div>
@@ -1453,6 +1588,11 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
         setManageRegisteredUsers(users);
     };
 
+    const handleUpdateVolunteer = async (appId: string, status: VolunteerStatus) => {
+        await api.volunteers.updateStatus(appId, status);
+        setManageVolunteers(prev => prev.map(v => v.id === appId ? { ...v, status } : v));
+    };
+
     if (viewingClub) {
         return <StudentClubDetail club={viewingClub} onBack={() => setViewingClub(null)} user={currentUser} onUpdateUser={() => {}} readOnly={true} onEventClick={handleEventClick} />;
     }
@@ -1582,7 +1722,7 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
                 event={viewingEvent}
                 volunteers={manageVolunteers}
                 registeredUsers={manageRegisteredUsers}
-                onUpdateVolunteerStatus={() => {}} 
+                onUpdateVolunteerStatus={handleUpdateVolunteer}
             />
         </div>
     );
@@ -2272,12 +2412,34 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
                                      <p className="font-bold">{winners[2].name}</p>
                                  </div>
                             </div>
-                            <p className="text-gray-500 font-bold text-sm uppercase tracking-widest">Organized by {posterEvent?.organizer}</p>
+                            <div className="flex justify-between items-end mt-8 border-t border-gray-800 pt-4">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-black font-black text-xs">C</div>
+                                    <span className="text-xs font-bold uppercase tracking-widest text-gray-400">College Name</span>
+                                </div>
+                                <p className="text-gray-500 font-bold text-sm uppercase tracking-widest">Organized by {posterEvent?.organizer}</p>
+                            </div>
                         </div>
                     )}
                     <div className="mt-6 flex justify-center gap-4">
                         <button onClick={() => setGeneratedPoster(false)} className="px-4 py-2 border-2 border-black font-bold uppercase hover:bg-gray-100 text-black">Edit</button>
-                        <button onClick={() => alert("Poster Saved/Downloaded!")} className="bg-black text-white px-6 py-2 font-bold uppercase hover:bg-gray-800">Download</button>
+                        <button 
+                            onClick={() => {
+                                const input = document.getElementById('poster-area');
+                                if (input) {
+                                    html2canvas(input).then((canvas) => {
+                                        const imgData = canvas.toDataURL('image/png');
+                                        const link = document.createElement('a');
+                                        link.href = imgData;
+                                        link.download = `${posterEvent?.title}-Winners.png`;
+                                        link.click();
+                                    });
+                                }
+                            }} 
+                            className="bg-black text-white px-6 py-2 font-bold uppercase hover:bg-gray-800"
+                        >
+                            Download
+                        </button>
                     </div>
                 </div>
             )}
@@ -2327,6 +2489,7 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
             volunteers={manageVolunteers}
             registeredUsers={manageRegisteredUsers}
             onUpdateVolunteerStatus={handleUpdateVolunteer}
+            onIssueCertificates={handleIssueCertificates}
         />
 
         {activeTab === 'profile' && (
