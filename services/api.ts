@@ -27,8 +27,9 @@ export const api = {
       
       return data as User;
     },
-    signup: async (user: User): Promise<User> => {
-      const { error } = await supabase.from('users').insert(user);
+    signup: async (user: User, password?: string): Promise<User> => {
+      const userData = password ? { ...user, password } : user;
+      const { error } = await supabase.from('users').insert(userData);
       if (error) throw new Error(error.message);
       return user;
     },
@@ -71,8 +72,9 @@ export const api = {
           if (error) throw new Error(error.message);
           return club;
       },
-      createUser: async (user: User): Promise<User> => {
-          const { error } = await supabase.from('users').insert(user);
+      createUser: async (user: User, password?: string): Promise<User> => {
+          const userData = password ? { ...user, password } : user;
+          const { error } = await supabase.from('users').insert(userData);
           if (error) throw new Error(error.message);
           return user;
       },
@@ -162,7 +164,7 @@ export const api = {
             .eq('id', eventId);
     },
     issueCertificates: async (eventId: string): Promise<void> => {
-        await supabase.from('events').update({ certificatesIssued: true }).eq('id', eventId);
+        await supabase.from('events').update({ certificatesIssued: true, status: 'COMPLETED' }).eq('id', eventId);
     },
     saveWinners: async (eventId: string, winners: Winner[]): Promise<void> => {
         await supabase.from('events').update({ winners }).eq('id', eventId);
@@ -217,7 +219,13 @@ export const api = {
             return [];
         }
         // Safely filter results
-        return (data as User[]).filter(u => u.joinedClubIds && Array.isArray(u.joinedClubIds) && u.joinedClubIds.includes(clubId));
+        return (data as User[]).filter(u => {
+            if (!u.joinedClubIds) return false;
+            if (Array.isArray(u.joinedClubIds)) return u.joinedClubIds.includes(clubId);
+            // Handle case where it might be a string (invalid data)
+            if (typeof u.joinedClubIds === 'string') return (u.joinedClubIds as string).includes(clubId);
+            return false;
+        });
     }
   },
   posts: {

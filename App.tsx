@@ -46,7 +46,7 @@ const ImageUpload = ({ label, onImageSelected, currentImage }: { label: string, 
            </div>
         )}
         <label className="cursor-pointer bg-white border-2 border-black px-4 py-3 font-bold hover:bg-yellow-50 flex items-center gap-2 transition-colors">
-            <span>{currentImage ? 'Change' : 'Choose'}</span>
+            <span>{currentImage ? 'Change Image' : 'Choose Image'}</span>
             <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
         </label>
       </div>
@@ -83,27 +83,26 @@ const VolunteerBadge = ({ status }: { status: VolunteerStatus }) => {
     );
 };
 
-const SplashScreen = () => {
-    return (
-        <div className="fixed inset-0 bg-yellow-400 flex flex-col items-center justify-center z-50 animate-out fade-out duration-500 delay-[2000ms] fill-mode-forwards">
-            <h1 className="text-8xl font-black mb-2 text-black tracking-tighter animate-in zoom-in duration-700">CLIX<span className="text-white">.</span></h1>
-            <p className="font-bold text-black text-xl uppercase tracking-[0.5em] animate-in slide-in-from-bottom-4 duration-1000 delay-300">Campus Life</p>
-        </div>
-    );
-};
-
 // --- Modals ---
 
-const Modal = ({ isOpen, onClose, title, children, large = false }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode; large?: boolean }) => {
+interface ModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    title: string;
+    children?: React.ReactNode;
+    large?: boolean;
+}
+
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, large = false }) => {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
             <div className={`bg-white w-full ${large ? 'max-w-4xl' : 'max-w-2xl'} my-8 shadow-2xl border-4 border-yellow-400 animate-in zoom-in-95 duration-200 relative`}>
                 <div className="p-6 border-b-2 border-black flex justify-between items-center bg-gray-50 sticky top-0 z-10">
-                    <h2 className="text-xl font-black uppercase text-black">{title}</h2>
-                    <button onClick={onClose} className="hover:bg-red-500 hover:text-white p-1 transition text-black"><X size={24} /></button>
+                    <h2 className="text-xl font-black uppercase">{title}</h2>
+                    <button onClick={onClose} className="hover:bg-red-500 hover:text-white p-1 transition"><X size={24} /></button>
                 </div>
-                <div className="p-6 max-h-[80vh] overflow-y-auto text-black">
+                <div className="p-6 max-h-[80vh] overflow-y-auto">
                     {children}
                 </div>
             </div>
@@ -453,10 +452,7 @@ const EventManagementModal = ({ isOpen, onClose, event, volunteers, registeredUs
     );
 };
 
-// ... (Rest of App.tsx follows standard structure, only changed ClubAdminDashboard poster modal)
-
 // --- Component: EventCard ---
-// (No changes to EventCard)
 const EventCard = ({ event, isAdminView, onClick, onRegister, onEdit, onGeneratePoster, onIssueCertificates, venueName, onVolunteer, volunteerStatus, isRegistered }: { 
     event: Event, 
     isAdminView?: boolean, 
@@ -651,22 +647,21 @@ const ProfileView = ({ user, onLogout, onEdit }: { user: User, onLogout: () => v
 }
 
 // ... StudentClubDetail ...
-// (Omitting StudentClubDetail, StudentMediaView, StudentDashboard, CollegeAdminDashboard to focus on relevant ClubAdminDashboard change)
-// Assuming full file replacement, including them is safer.
-
 const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false, onEventClick }: { club: Club, onBack: () => void, user: User, onUpdateUser: (u: User) => void, readOnly?: boolean, onEventClick?: (e: Event) => void }) => {
-    // ... (same as before)
     const [activeTab, setActiveTab] = useState<'overview' | 'discussion'>('overview');
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [events, setEvents] = useState<Event[]>([]);
     const [media, setMedia] = useState<MediaPost[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadingJoin, setLoadingJoin] = useState(false);
+    
+    // Discussion State
     const [posts, setPosts] = useState<Post[]>([]);
     const [newPostContent, setNewPostContent] = useState('');
     const [loadingPost, setLoadingPost] = useState(false);
     const [commentingPostId, setCommentingPostId] = useState<string | null>(null);
     const [newComment, setNewComment] = useState('');
+
     const isMember = (user.joinedClubIds || []).includes(club.id);
 
     useEffect(() => {
@@ -678,9 +673,11 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
                     api.events.list(club.id),
                     api.media.list(club.id)
                 ]);
+                
                 setAnnouncements(anns);
                 setEvents(evs);
                 setMedia(meds);
+                
                 if (isMember) {
                     const clubPosts = await api.posts.list(club.id);
                     setPosts(clubPosts);
@@ -697,8 +694,10 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
         const newJoinedIds = wasMember
             ? (user.joinedClubIds || []).filter(id => id !== club.id)
             : [...(user.joinedClubIds || []), club.id];
+        
         const optimisticUser = { ...user, joinedClubIds: newJoinedIds };
         onUpdateUser(optimisticUser);
+        
         setLoadingJoin(true);
         try {
             let updatedUser;
@@ -718,6 +717,7 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
 
     const handleCreatePost = async () => {
         if (!newPostContent.trim()) return;
+        
         const tempId = `temp-${Date.now()}`;
         const newPost: Post = {
             id: tempId,
@@ -730,8 +730,10 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
             likedBy: [],
             comments: []
         };
+
         setPosts([newPost, ...posts]);
         setNewPostContent('');
+        
         try {
             const postToCreate = { ...newPost, id: `p${Date.now()}` }; 
             await api.posts.create(postToCreate);
@@ -745,6 +747,7 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
     const handleLikePost = async (post: Post) => {
         const isLiked = post.likedBy.includes(user.id);
         const newLikedBy = isLiked ? post.likedBy.filter(id => id !== user.id) : [...post.likedBy, user.id];
+        
         setPosts(posts.map(p => p.id === post.id ? { ...p, likedBy: newLikedBy } : p));
         await api.posts.like(post.id, user.id);
     };
@@ -771,6 +774,7 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
              <button onClick={onBack} className="mb-4 flex items-center gap-2 text-sm font-bold hover:text-yellow-500 transition-colors text-black">
                 <ArrowLeft size={16} /> Back to Clubs
              </button>
+             
              <div className="bg-white border-2 border-black overflow-hidden mb-6">
                  <div className="h-32 bg-gray-200 relative">
                      <img src={club.banner} className="w-full h-full object-cover grayscale opacity-50" />
@@ -780,7 +784,10 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
                      <div className="flex justify-between items-end -mt-8 mb-4">
                          <img src={club.logo} className="w-20 h-20 border-2 border-black bg-white object-cover" />
                          {!readOnly && (
-                             <button onClick={handleJoinToggle} className={`px-6 py-2 text-xs font-bold uppercase tracking-widest flex items-center gap-2 border-2 transition-colors ${isMember ? 'bg-white border-black text-black hover:bg-gray-100' : 'bg-black text-white border-black hover:bg-gray-800'}`}>
+                             <button 
+                                onClick={handleJoinToggle}
+                                className={`px-6 py-2 text-xs font-bold uppercase tracking-widest flex items-center gap-2 border-2 transition-colors ${isMember ? 'bg-white border-black text-black hover:bg-gray-100' : 'bg-black text-white border-black hover:bg-gray-800'}`}
+                             >
                                 {loadingJoin ? <Loader2 className="animate-spin" size={14}/> : (isMember ? 'Leave Club' : 'Join Club')}
                              </button>
                          )}
@@ -794,16 +801,28 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
                      <p className="text-gray-600 font-medium">{club.description}</p>
                  </div>
              </div>
+
              <div className="flex border-b-2 border-gray-200 mb-6">
-                <button onClick={() => setActiveTab('overview')} className={`flex-1 py-3 text-sm font-bold uppercase tracking-widest border-b-4 transition-colors ${activeTab === 'overview' ? 'border-yellow-400 text-black' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
-                    <div className="flex items-center justify-center gap-2"><LayoutGrid size={16} /> Overview</div>
+                <button 
+                    onClick={() => setActiveTab('overview')} 
+                    className={`flex-1 py-3 text-sm font-bold uppercase tracking-widest border-b-4 transition-colors ${activeTab === 'overview' ? 'border-yellow-400 text-black' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                >
+                    <div className="flex items-center justify-center gap-2">
+                        <LayoutGrid size={16} /> Overview
+                    </div>
                 </button>
                 {!readOnly && (
-                    <button onClick={() => setActiveTab('discussion')} className={`flex-1 py-3 text-sm font-bold uppercase tracking-widest border-b-4 transition-colors ${activeTab === 'discussion' ? 'border-yellow-400 text-black' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
-                        <div className="flex items-center justify-center gap-2"><MessageSquare size={16} /> Discussion</div>
+                    <button 
+                        onClick={() => setActiveTab('discussion')} 
+                        className={`flex-1 py-3 text-sm font-bold uppercase tracking-widest border-b-4 transition-colors ${activeTab === 'discussion' ? 'border-yellow-400 text-black' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                    >
+                        <div className="flex items-center justify-center gap-2">
+                            <MessageSquare size={16} /> Discussion
+                        </div>
                     </button>
                 )}
              </div>
+
              {activeTab === 'overview' && (
                  <div className="space-y-8 animate-in fade-in duration-300">
                      <div>
@@ -819,16 +838,24 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
                              </div>
                          )}
                      </div>
+
                      <div>
                          <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2 border-b-2 border-gray-100 pb-2 text-black"><Calendar size={20}/> Upcoming Events</h3>
                          <div className="grid grid-cols-1 gap-4">
                             {events.length === 0 ? <p className="text-gray-400 italic">No upcoming events.</p> : (
                                 events.map(event => (
-                                    <EventCard key={event.id} event={event} isAdminView={false} venueName={event.venueId} onClick={() => onEventClick?.(event)} />
+                                    <EventCard 
+                                        key={event.id}
+                                        event={event}
+                                        isAdminView={false}
+                                        venueName={event.venueId}
+                                        onClick={() => onEventClick?.(event)}
+                                    />
                                 ))
                             )}
                          </div>
                      </div>
+
                       <div>
                          <h3 className="text-xl font-black uppercase mb-4 flex items-center gap-2 border-b-2 border-gray-100 pb-2 text-black"><ImageIcon size={20}/> Club Gallery</h3>
                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -846,18 +873,30 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
                       </div>
                  </div>
              )}
+
              {activeTab === 'discussion' && (
                  <div className="animate-in fade-in duration-300">
                      {isMember ? (
                          <div className="space-y-6">
                              <div className="bg-gray-50 p-4 border border-gray-200">
-                                 <textarea className="w-full p-3 border border-gray-300 focus:outline-none focus:border-black mb-3 text-sm" rows={2} placeholder="Start a discussion..." value={newPostContent} onChange={e => setNewPostContent(e.target.value)} />
+                                 <textarea 
+                                    className="w-full p-3 border border-gray-300 focus:outline-none focus:border-black mb-3 text-sm"
+                                    rows={2}
+                                    placeholder="Start a discussion..."
+                                    value={newPostContent}
+                                    onChange={e => setNewPostContent(e.target.value)}
+                                 />
                                  <div className="flex justify-end">
-                                     <button onClick={handleCreatePost} disabled={loadingPost} className="bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-wide hover:bg-gray-800 disabled:opacity-50 flex items-center gap-2">
+                                     <button 
+                                        onClick={handleCreatePost}
+                                        disabled={loadingPost}
+                                        className="bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-wide hover:bg-gray-800 disabled:opacity-50 flex items-center gap-2"
+                                     >
                                          {loadingPost ? <Loader2 className="animate-spin" size={14}/> : <><Send size={14} /> Post</>}
                                      </button>
                                  </div>
                              </div>
+
                              <div className="space-y-4">
                                  {posts.length === 0 && <p className="text-gray-400 italic text-center">No discussions yet. Be the first!</p>}
                                  {posts.map(post => {
@@ -872,14 +911,22 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
                                                  </div>
                                              </div>
                                              <p className="text-sm mb-4">{post.content}</p>
+                                             
                                              <div className="flex items-center gap-4 border-t border-gray-100 pt-2">
-                                                 <button onClick={() => handleLikePost(post)} className={`flex items-center gap-1 text-xs font-bold transition-colors ${isLiked ? 'text-blue-600' : 'text-gray-500 hover:text-black'}`}>
+                                                 <button 
+                                                    onClick={() => handleLikePost(post)}
+                                                    className={`flex items-center gap-1 text-xs font-bold transition-colors ${isLiked ? 'text-blue-600' : 'text-gray-500 hover:text-black'}`}
+                                                 >
                                                      <ThumbsUp size={14} fill={isLiked ? "currentColor" : "none"}/> {post.likedBy.length} Likes
                                                  </button>
-                                                 <button onClick={() => setCommentingPostId(commentingPostId === post.id ? null : post.id)} className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-black transition-colors">
+                                                 <button 
+                                                    onClick={() => setCommentingPostId(commentingPostId === post.id ? null : post.id)}
+                                                    className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-black transition-colors"
+                                                 >
                                                      <MessageSquare size={14} /> {post.comments.length} Comments
                                                  </button>
                                              </div>
+
                                              {commentingPostId === post.id && (
                                                  <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
                                                      <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
@@ -891,7 +938,13 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
                                                          ))}
                                                      </div>
                                                      <div className="flex gap-2">
-                                                         <input type="text" className="flex-1 border border-gray-300 p-2 text-xs focus:outline-none focus:border-black" placeholder="Write a comment..." value={newComment} onChange={e => setNewComment(e.target.value)} />
+                                                         <input 
+                                                            type="text" 
+                                                            className="flex-1 border border-gray-300 p-2 text-xs focus:outline-none focus:border-black"
+                                                            placeholder="Write a comment..."
+                                                            value={newComment}
+                                                            onChange={e => setNewComment(e.target.value)}
+                                                         />
                                                          <button onClick={() => handleAddComment(post.id)} className="bg-black text-white px-3 py-1 text-xs font-bold uppercase">Reply</button>
                                                      </div>
                                                  </div>
@@ -1019,8 +1072,9 @@ const StudentMediaView = ({ user }: { user: User }) => {
     );
 };
 
+// --- Dashboard Components ---
+
 const StudentDashboard = ({ user, activeTab, onLogout }: { user: User, activeTab: string, onLogout: () => void }) => {
-    // ... (StudentDashboard implementation same as before)
     const [events, setEvents] = useState<Event[]>([]);
     const [clubs, setClubs] = useState<Club[]>([]);
     const [venues, setVenues] = useState<Venue[]>([]);
@@ -1200,7 +1254,6 @@ const StudentDashboard = ({ user, activeTab, onLogout }: { user: User, activeTab
 };
 
 const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, activeTab: string, onLogout: () => void }) => {
-    // ... (CollegeAdminDashboard same as before)
     const [events, setEvents] = useState<Event[]>([]);
     const [clubs, setClubs] = useState<Club[]>([]);
     const [viewingClub, setViewingClub] = useState<Club | null>(null);
@@ -1254,7 +1307,7 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
                 role: UserRole.CLUB_ADMIN,
                 joinDate: new Date().toISOString(),
             };
-            await api.admin.createUser(adminUser);
+            await api.admin.createUser(adminUser, adminForm.password);
 
             const clubId = `c${Date.now()}`;
             const clubData: Club = {
@@ -2288,7 +2341,7 @@ const SignupPage = ({ onSignup, onSwitchToLogin }: { onSignup: (u: User) => void
                 avatar
             };
             // In real app, we would send password to API too
-            const u = await api.auth.signup(newUser); 
+            const u = await api.auth.signup(newUser, password); 
             onSignup(u);
         } catch (err) {
             alert('Signup failed');
@@ -2382,6 +2435,15 @@ const SignupPage = ({ onSignup, onSwitchToLogin }: { onSignup: (u: User) => void
         </div>
     );
 };
+
+// Fixed: Defined SplashScreen component
+const SplashScreen = () => (
+    <div className="fixed inset-0 bg-yellow-400 z-50 flex items-center justify-center flex-col">
+        <h1 className="text-6xl font-black text-black tracking-tighter mb-4">CLIX<span className="text-white">.</span></h1>
+        <Loader2 className="animate-spin text-black" size={48} />
+        <p className="text-black font-bold uppercase tracking-widest mt-4 text-xs">Loading Campus...</p>
+    </div>
+);
 
 // ... App ...
 const App = () => {
