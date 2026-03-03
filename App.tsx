@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Layout from './components/Layout';
-import { UserRole, EventStatus, Event, User, Venue, Club, Post, VolunteerApplication, VolunteerStatus, Announcement, MediaPost, Feedback, Comment, Winner } from './types';
+import { UserRole, EventStatus, Event, User, Venue, Club, Post, VolunteerApplication, VolunteerStatus, Announcement, MediaPost, Feedback, Comment, Winner, Notification } from './types';
 import { MOCK_USERS } from './constants';
 import { api } from './services/api'; 
 import { generateEventContent, generateEventReport, generateImage } from './services/geminiService';
@@ -9,9 +9,9 @@ import {
   Calendar, MapPin, Clock, Users, Check, X, Search, Loader2, Sparkles, AlertCircle, TrendingUp,
   DollarSign, CheckSquare, Hand, Trophy, Megaphone, PlusCircle, Mail, Lock, ArrowRight, Edit,
   Save, MessageSquare, Heart, Send, ArrowLeft, FileText, Briefcase, LogOut, Filter, Star, QrCode, Image as ImageIcon,
-  Smartphone, Award, Download, Home, BarChart3, UserCog, Ticket, ChevronRight, Eye, ThumbsUp, LayoutGrid, FileText as ReportIcon, Palette, Share2, Plus, PenSquare
+  Award, Download, Home, BarChart3, UserCog, Ticket, ChevronRight, Eye, ThumbsUp, LayoutGrid, FileText as ReportIcon, Palette, Share2, Plus, PenSquare, ExternalLink
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import QRCode from "react-qr-code";
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -20,38 +20,58 @@ import { Html5QrcodeScanner } from "html5-qrcode";
 
 // --- Helpers ---
 
-const ImageUpload = ({ label, onImageSelected, currentImage }: { label: string, onImageSelected: (base64: string) => void, currentImage?: string }) => {
+const ImageUpload = ({ label, onImageSelected, currentImage, multiple = false }: { label: string, onImageSelected: (base64: string | string[]) => void, currentImage?: string | string[], multiple?: boolean }) => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5000000) { // 5MB limit check
-          alert("File is too large. Please select an image under 5MB.");
-          return;
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      if (multiple) {
+        const promises = Array.from(files).map((file: File) => {
+             return new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(file);
+             });
+        });
+        Promise.all(promises).then(results => onImageSelected(results));
+      } else {
+        const file = files[0];
+        if (file.size > 5000000) {
+            alert("File is too large. Please select an image under 5MB.");
+            return;
+        }
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          onImageSelected(reader.result as string);
+        };
+        reader.readAsDataURL(file);
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        onImageSelected(reader.result as string);
-      };
-      reader.readAsDataURL(file);
     }
   };
 
   return (
     <div>
       <label className="block text-xs font-bold uppercase text-gray-500 mb-2">{label}</label>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         {currentImage ? (
-           <div className="relative group">
-              <img src={currentImage} alt="Preview" className="w-20 h-20 object-cover border-2 border-black" />
-           </div>
+           multiple && Array.isArray(currentImage) ? (
+               <div className="flex gap-2 overflow-x-auto">
+                   {currentImage.map((img, idx) => (
+                       <img key={idx} src={img} alt="Preview" className="w-20 h-20 object-cover border-2 border-black" />
+                   ))}
+               </div>
+           ) : (
+               <div className="relative group">
+                  <img src={currentImage as string} alt="Preview" className="w-20 h-20 object-cover border-2 border-black" />
+               </div>
+           )
         ) : (
            <div className="w-20 h-20 border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400">
               <ImageIcon size={24} />
            </div>
         )}
         <label className="cursor-pointer bg-white border-2 border-black px-4 py-3 font-bold hover:bg-yellow-50 flex items-center gap-2 transition-colors">
-            <span>{currentImage ? 'Change Image' : 'Choose Image'}</span>
-            <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+            <span>{currentImage ? 'Change Image(s)' : 'Choose Image(s)'}</span>
+            <input type="file" accept="image/*" multiple={multiple} className="hidden" onChange={handleFileChange} />
         </label>
       </div>
     </div>
@@ -119,12 +139,14 @@ const PaymentModal = ({ isOpen, onClose, event, onConfirm }: { isOpen: boolean, 
     const [success, setSuccess] = useState(false);
 
     const handlePay = () => {
+        window.open('https://payments-test.cashfree.com/forms/clixapp', '_blank');
         setProcessing(true);
-        setTimeout(() => {
-            setProcessing(false);
-            setSuccess(true);
-            onConfirm();
-        }, 1500); 
+    };
+
+    const handleConfirmPayment = () => {
+        setProcessing(false);
+        setSuccess(true);
+        onConfirm();
     };
 
     const handleDownloadReceipt = () => {
@@ -155,35 +177,27 @@ const PaymentModal = ({ isOpen, onClose, event, onConfirm }: { isOpen: boolean, 
                         </div>
                         
                         <div className="space-y-3">
-                            <p className="font-bold text-sm uppercase text-left mb-2">Select Payment Method</p>
+                            <p className="font-bold text-sm uppercase text-left mb-2">Payment Method</p>
                             <button 
                                 onClick={handlePay}
-                                disabled={processing}
                                 className="w-full flex items-center justify-between p-4 border-2 border-black hover:bg-yellow-50 transition group"
                             >
                                 <div className="flex items-center gap-3">
                                     <div className="bg-black text-white p-2 rounded">
-                                        <Smartphone size={20} />
+                                        <ExternalLink size={20} />
                                     </div>
-                                    <span className="font-bold">UPI / GPay / PhonePe</span>
+                                    <span className="font-bold">Pay via Cashfree</span>
                                 </div>
                                 <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform"/>
-                            </button>
-                            
-                            <button disabled className="w-full flex items-center justify-between p-4 border-2 border-gray-200 text-gray-400 cursor-not-allowed">
-                                <div className="flex items-center gap-3">
-                                    <div className="bg-gray-200 text-gray-400 p-2 rounded">
-                                        <DollarSign size={20} />
-                                    </div>
-                                    <span className="font-bold">Credit/Debit Card (Coming Soon)</span>
-                                </div>
                             </button>
                         </div>
 
                         {processing && (
-                            <div className="flex flex-col items-center justify-center text-yellow-500 animate-pulse">
-                                <Loader2 className="animate-spin mb-2" size={32} />
-                                <span className="font-bold text-xs uppercase tracking-widest">Processing Payment...</span>
+                            <div className="animate-in fade-in slide-in-from-bottom-4 bg-yellow-50 p-4 border border-yellow-200 rounded">
+                                <p className="text-sm text-gray-700 mb-3 font-medium">Complete payment in the new tab, then click below.</p>
+                                <button onClick={handleConfirmPayment} className="w-full bg-green-500 text-white py-3 font-bold uppercase tracking-widest hover:bg-green-600 rounded">
+                                    I Have Completed Payment
+                                </button>
                             </div>
                         )}
                     </>
@@ -305,19 +319,17 @@ const CertificateModal = ({ isOpen, onClose, event, user }: { isOpen: boolean, o
 
 const EditProfileModal = ({ isOpen, onClose, user, onUpdate }: { isOpen: boolean, onClose: () => void, user: User, onUpdate: (data: Partial<User>) => void }) => {
     const [name, setName] = useState(user.name);
-    const [bio, setBio] = useState(user.bio || '');
     const [avatar, setAvatar] = useState(user.avatar || '');
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         setName(user.name);
-        setBio(user.bio || '');
         setAvatar(user.avatar || '');
     }, [user, isOpen]);
 
     const handleSave = async () => {
         setLoading(true);
-        await onUpdate({ name, bio, avatar });
+        await onUpdate({ name, avatar });
         setLoading(false);
         onClose();
     };
@@ -333,10 +345,6 @@ const EditProfileModal = ({ isOpen, onClose, user, onUpdate }: { isOpen: boolean
                 <div>
                     <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Full Name</label>
                     <input className="w-full p-3 border-2 border-gray-200 focus:border-black focus:outline-none font-bold text-black" value={name} onChange={e => setName(e.target.value)} />
-                </div>
-                <div>
-                    <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Bio</label>
-                    <textarea rows={3} className="w-full p-3 border-2 border-gray-200 focus:border-black focus:outline-none font-medium text-black" value={bio} onChange={e => setBio(e.target.value)} placeholder="Tell us about yourself..." />
                 </div>
                 <button onClick={handleSave} disabled={loading} className="w-full bg-black text-white py-3 font-bold uppercase tracking-widest hover:bg-gray-800">
                     {loading ? <Loader2 className="animate-spin mx-auto"/> : 'Save Changes'}
@@ -392,35 +400,67 @@ const EventManagementModal = ({ isOpen, onClose, event, volunteers, registeredUs
         setScanning(false);
     }, [event?.id]);
 
+    const registeredUsersRef = useRef(registeredUsers);
+    const attendedUsersRef = useRef(attendedUsers);
+
     useEffect(() => {
+        registeredUsersRef.current = registeredUsers;
+        attendedUsersRef.current = attendedUsers;
+    }, [registeredUsers, attendedUsers]);
+
+    useEffect(() => {
+        let scanner: Html5QrcodeScanner | null = null;
         if (scanning && event) {
-            const scanner = new Html5QrcodeScanner(
-                "reader",
-                { fps: 10, qrbox: { width: 250, height: 250 } },
-                /* verbose= */ false
-            );
-            scanner.render((decodedText) => {
-                // Assume decodedText is userId or ticketId. For now check if user exists in registeredUsers
-                const user = registeredUsers.find(u => u.id === decodedText || decodedText.includes(u.id));
-                if (user) {
-                    if (!attendedUsers.includes(user.id)) {
-                        setAttendedUsers(prev => [...prev, user.id]);
-                        alert(`Verified: ${user.name}`);
-                    } else {
-                        alert(`Already verified: ${user.name}`);
+            const timer = setTimeout(() => {
+                const element = document.getElementById("reader");
+                if (element) {
+                    try {
+                        scanner = new Html5QrcodeScanner(
+                            "reader",
+                            { fps: 10, qrbox: { width: 250, height: 250 } },
+                            /* verbose= */ false
+                        );
+                        scanner.render((decodedText) => {
+                            const currentRegistered = registeredUsersRef.current;
+                            const currentAttended = attendedUsersRef.current;
+                            
+                            // Check if decodedText is valid JSON
+                            let userId = decodedText;
+                            try {
+                                const data = JSON.parse(decodedText);
+                                if (data.userId) userId = data.userId;
+                            } catch (e) {
+                                // Not JSON, assume it's ID
+                            }
+
+                            const user = currentRegistered.find(u => u.id === userId || userId.includes(u.id));
+                            if (user) {
+                                if (!currentAttended.includes(user.id)) {
+                                    setAttendedUsers(prev => [...prev, user.id]);
+                                    alert(`Verified: ${user.name}`);
+                                } else {
+                                    alert(`Already verified: ${user.name}`);
+                                }
+                            } else {
+                                alert("Invalid Ticket or User not registered.");
+                            }
+                        }, (error) => {
+                            // console.warn(error);
+                        });
+                    } catch (e) {
+                        console.error("Scanner init failed", e);
                     }
-                } else {
-                    alert("Invalid Ticket or User not registered.");
                 }
-            }, (error) => {
-                // console.warn(error);
-            });
+            }, 300);
 
             return () => {
-                scanner.clear().catch(error => console.error("Failed to clear scanner", error));
+                clearTimeout(timer);
+                if (scanner) {
+                    scanner.clear().catch(error => console.error("Failed to clear scanner", error));
+                }
             };
         }
-    }, [scanning, registeredUsers, attendedUsers, event]);
+    }, [scanning, event]);
 
     const handleDownloadParticipants = () => {
         if (!event) return;
@@ -533,7 +573,7 @@ const EventManagementModal = ({ isOpen, onClose, event, volunteers, registeredUs
                         <div className="flex justify-between items-center mb-4 border-b-2 border-black pb-2">
                             <h3 className="text-lg font-black uppercase text-black">Registered Students</h3>
                             <div className="flex gap-2">
-                                {event && new Date(event.date) >= new Date() && (
+                                {event && (
                                     <button 
                                         onClick={() => setScanning(!scanning)} 
                                         className={`px-3 py-1 text-xs font-bold uppercase flex items-center gap-2 ${scanning ? 'bg-red-500 text-white' : 'bg-black text-white'}`}
@@ -1155,6 +1195,7 @@ const StudentMediaView = ({ user }: { user: User }) => {
     const [loading, setLoading] = useState(true);
     const [newComment, setNewComment] = useState("");
     const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+    const [currentImageIndices, setCurrentImageIndices] = useState<{[key: string]: number}>({});
 
     useEffect(() => {
         api.media.list().then(m => {
@@ -1188,46 +1229,107 @@ const StudentMediaView = ({ user }: { user: User }) => {
 
     const handleShare = (m: MediaPost) => {
         const shareData = {
-            title: m.caption,
-            text: `Check out this photo from Clix!`,
-            url: window.location.href 
+            title: 'Check out this post!',
+            text: m.caption,
+            url: window.location.href
         };
         if (navigator.share) {
             navigator.share(shareData).catch(console.error);
         } else {
-            alert(`Link copied to clipboard: ${window.location.href}`);
+            alert("Share feature not supported on this browser.");
         }
+    };
+
+    const nextImage = (postId: string, total: number) => {
+        setCurrentImageIndices(prev => ({
+            ...prev,
+            [postId]: ((prev[postId] || 0) + 1) % total
+        }));
+    };
+
+    const prevImage = (postId: string, total: number) => {
+        setCurrentImageIndices(prev => ({
+            ...prev,
+            [postId]: ((prev[postId] || 0) - 1 + total) % total
+        }));
     };
 
     if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin" size={32}/></div>;
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in duration-500">
+        <div className="max-w-md mx-auto space-y-8 pb-20 animate-in fade-in duration-500">
             {media.map(item => {
                 const isLiked = item.likedBy.includes(user.id);
+                const currentIdx = currentImageIndices[item.id] || 0;
+                const images = item.imageUrls || (item.imageUrl ? [item.imageUrl] : []); // Fallback for old data
+                
                 return (
-                    <div key={item.id} className="bg-white border-2 border-black shadow-[8px_8px_0px_#000] text-black">
-                        <div className="relative">
-                            <img src={item.imageUrl} className="w-full h-64 object-cover border-b-2 border-black" />
-                            <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm px-3 py-1 border border-black text-xs font-bold uppercase">
-                                {item.caption}
+                    <div key={item.id} className="bg-white border-2 border-black shadow-[4px_4px_0px_#000] text-black overflow-hidden">
+                        {/* Header */}
+                        <div className="p-3 flex items-center gap-3 border-b-2 border-black bg-gray-50">
+                            <div className="w-8 h-8 rounded-full bg-yellow-400 border border-black flex items-center justify-center font-bold text-xs">
+                                {item.clubId.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                                <p className="font-bold text-sm">Club Name</p> 
+                                <p className="text-[10px] text-gray-500">{new Date(item.timestamp || Date.now()).toLocaleDateString()}</p>
                             </div>
                         </div>
-                        <div className="p-4">
-                            <div className="flex items-center justify-between mb-4">
+
+                        {/* Image Carousel */}
+                        <div className="relative aspect-square bg-black">
+                            <img src={images[currentIdx]} className="w-full h-full object-contain" />
+                            
+                            {images.length > 1 && (
+                                <>
+                                    <button 
+                                        onClick={() => prevImage(item.id, images.length)}
+                                        className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 p-1 rounded-full hover:bg-white border border-black"
+                                    >
+                                        <ArrowLeft size={16} />
+                                    </button>
+                                    <button 
+                                        onClick={() => nextImage(item.id, images.length)}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 p-1 rounded-full hover:bg-white border border-black"
+                                    >
+                                        <ArrowRight size={16} />
+                                    </button>
+                                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                                        {images.map((_, idx) => (
+                                            <div key={idx} className={`w-1.5 h-1.5 rounded-full ${idx === currentIdx ? 'bg-yellow-400' : 'bg-gray-400'}`} />
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="p-3">
+                            <div className="flex items-center justify-between mb-2">
                                 <div className="flex gap-4">
-                                    <button onClick={() => handleLike(item)} className={`flex items-center gap-1 font-bold ${isLiked ? 'text-red-500' : 'text-gray-500 hover:text-black'}`}>
-                                        <Heart size={20} fill={isLiked ? "currentColor" : "none"} /> {item.likedBy.length}
+                                    <button onClick={() => handleLike(item)} className={`flex items-center gap-1 font-bold transition-transform active:scale-95 ${isLiked ? 'text-red-500' : 'text-black'}`}>
+                                        <Heart size={24} fill={isLiked ? "currentColor" : "none"} strokeWidth={2} />
                                     </button>
-                                    <button onClick={() => setActiveCommentId(activeCommentId === item.id ? null : item.id)} className="flex items-center gap-1 font-bold text-gray-500 hover:text-black">
-                                        <MessageSquare size={20} /> {item.comments.length}
+                                    <button onClick={() => setActiveCommentId(activeCommentId === item.id ? null : item.id)} className="flex items-center gap-1 font-bold text-black hover:text-gray-600">
+                                        <MessageSquare size={24} strokeWidth={2} />
                                     </button>
+                                    <button onClick={() => handleShare(item)} className="text-black hover:text-gray-600"><Share2 size={24} strokeWidth={2} /></button>
                                 </div>
-                                <button onClick={() => handleShare(item)} className="text-gray-500 hover:text-black"><Share2 size={20} /></button>
                             </div>
+
+                            <p className="text-sm font-bold mb-1">{item.likedBy.length} likes</p>
+                            
+                            <div className="mb-2">
+                                <span className="font-bold text-sm mr-2">Club Name</span>
+                                <span className="text-sm">{item.caption}</span>
+                            </div>
+
+                            <button onClick={() => setActiveCommentId(activeCommentId === item.id ? null : item.id)} className="text-gray-500 text-xs font-bold mb-2">
+                                View all {item.comments.length} comments
+                            </button>
                             
                             {activeCommentId === item.id && (
-                                <div className="mt-4 border-t border-gray-100 pt-4 animate-in slide-in-from-top-2">
+                                <div className="mt-2 border-t border-gray-100 pt-2 animate-in slide-in-from-top-2">
                                     <div className="max-h-40 overflow-y-auto space-y-2 mb-3">
                                         {item.comments.map(c => (
                                             <div key={c.id} className="text-xs">
@@ -1239,26 +1341,27 @@ const StudentMediaView = ({ user }: { user: User }) => {
                                         <input 
                                             type="text" 
                                             placeholder="Add a comment..."
-                                            className="flex-1 border border-black p-2 text-xs font-bold focus:outline-none"
+                                            className="flex-1 border-b border-gray-300 py-1 text-xs focus:outline-none focus:border-black"
                                             value={newComment}
                                             onChange={e => setNewComment(e.target.value)}
                                         />
-                                        <button onClick={() => handleComment(item)} className="bg-black text-white px-3 font-bold uppercase text-xs">Post</button>
+                                        <button onClick={() => handleComment(item)} className="text-blue-500 font-bold text-xs uppercase disabled:opacity-50" disabled={!newComment.trim()}>Post</button>
                                     </div>
                                 </div>
                             )}
+                            <p className="text-[10px] text-gray-400 uppercase mt-2">{new Date(item.timestamp || Date.now()).toDateString()}</p>
                         </div>
                     </div>
                 );
             })}
-            {media.length === 0 && <div className="col-span-2 text-center py-10 text-gray-400">No media posts yet.</div>}
+            {media.length === 0 && <div className="text-center py-10 text-gray-400 font-bold">No posts yet.</div>}
         </div>
     );
 };
 
 // --- Dashboard Components ---
 
-const StudentDashboard = ({ user, activeTab, onLogout }: { user: User, activeTab: string, onLogout: () => void }) => {
+const StudentDashboard = ({ user, activeTab, onLogout, addNotification }: { user: User, activeTab: string, onLogout: () => void, addNotification: (userId: string, title: string, message: string, type?: any) => void }) => {
     const [events, setEvents] = useState<Event[]>([]);
     const [clubs, setClubs] = useState<Club[]>([]);
     const [venues, setVenues] = useState<Venue[]>([]);
@@ -1301,6 +1404,7 @@ const StudentDashboard = ({ user, activeTab, onLogout }: { user: User, activeTab
             await api.events.register(event.id, user.id);
             setMyTickets([...myTickets, event.id]);
             setEvents(events.map(e => e.id === event.id ? {...e, registeredCount: e.registeredCount + 1} : e));
+            addNotification(user.id, "Registration Successful", `You have registered for ${event.title}`, 'success');
             alert("Successfully Registered!");
             setShowPayment(false);
             setShowTicket(true);
@@ -1469,7 +1573,14 @@ const StudentDashboard = ({ user, activeTab, onLogout }: { user: User, activeTab
     );
 };
 
-const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, activeTab: string, onLogout: () => void }) => {
+const CollegeAdminDashboard = ({ user, activeTab, onLogout, addNotification }: { user: User, activeTab: string, onLogout: () => void, addNotification: (userId: string, title: string, message: string, type?: any) => void }) => {
+    const [users, setUsers] = useState<User[]>([]);
+
+    useEffect(() => {
+        if (activeTab === 'users') {
+            api.admin.listUsers().then(setUsers);
+        }
+    }, [activeTab]);
     const [events, setEvents] = useState<Event[]>([]);
     const [clubs, setClubs] = useState<Club[]>([]);
     const [viewingClub, setViewingClub] = useState<Club | null>(null);
@@ -1489,16 +1600,29 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
         api.clubs.list().then(setClubs);
     }, []);
 
-    const pendingEvents = events.filter(e => e.status === EventStatus.PENDING);
+    const pendingEvents = events.filter(e => e.status === EventStatus.VENUE_APPROVED);
 
     const handleApprove = async (id: string) => {
         await api.events.updateStatus(id, EventStatus.APPROVED);
         setEvents(events.map(e => e.id === id ? { ...e, status: EventStatus.APPROVED } : e));
+        const event = events.find(e => e.id === id);
+        if (event) {
+            // Notify Club Admin
+            const club = clubs.find(c => c.id === event.clubId);
+            if (club) addNotification(club.adminId, "Event Approved", `Your event "${event.title}" has been approved by College Admin.`, 'success');
+        }
     };
 
     const handleReject = async (id: string) => {
-        await api.events.updateStatus(id, EventStatus.REJECTED, "Does not meet criteria");
-        setEvents(events.map(e => e.id === id ? { ...e, status: EventStatus.REJECTED } : e));
+        const reason = prompt("Enter rejection reason:");
+        if (!reason) return;
+        await api.events.updateStatus(id, EventStatus.REJECTED, reason);
+        setEvents(events.map(e => e.id === id ? { ...e, status: EventStatus.REJECTED, rejectionReason: reason } : e));
+        const event = events.find(e => e.id === id);
+        if (event) {
+             const club = clubs.find(c => c.id === event.clubId);
+             if (club) addNotification(club.adminId, "Event Rejected", `Your event "${event.title}" was rejected by College Admin: ${reason}`, 'error');
+        }
     };
 
     const handleUpdateProfile = async (data: Partial<User>) => {
@@ -1599,8 +1723,8 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
 
     const clubStats = clubs.map(c => {
         const clubEvents = events.filter(e => e.clubId === c.id);
-        const registrations = clubEvents.reduce((acc, e) => acc + e.registeredCount, 0);
-        return { name: c.name, registrations };
+        const registrations = clubEvents.reduce((acc, e) => acc + (e.registeredCount || 0), 0);
+        return { name: c.name, registrations, members: c.memberCount || 0 };
     });
 
     return (
@@ -1663,6 +1787,39 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
                 </div>
             )}
             
+            {activeTab === 'users' && (
+                <div className="space-y-4">
+                    <h2 className="text-2xl font-black uppercase text-black">Manage Users</h2>
+                    <div className="bg-white border-2 border-black overflow-hidden">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-black text-white uppercase text-xs">
+                                    <th className="p-3">User</th>
+                                    <th className="p-3">Email</th>
+                                    <th className="p-3">Role</th>
+                                    <th className="p-3">Joined</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {users.map(u => (
+                                    <tr key={u.id} className="border-b border-gray-200 hover:bg-yellow-50 text-sm font-medium text-black">
+                                        <td className="p-3 flex items-center gap-2">
+                                            <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden">
+                                                {u.avatar ? <img src={u.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center font-bold text-gray-500">{u.name[0]}</div>}
+                                            </div>
+                                            {u.name}
+                                        </td>
+                                        <td className="p-3 text-gray-600">{u.email}</td>
+                                        <td className="p-3 uppercase text-xs font-bold tracking-wider">{u.role}</td>
+                                        <td className="p-3 text-gray-500 text-xs">{new Date(u.joinDate).toLocaleDateString()}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
             {activeTab === 'reports' && (
                 <div className="space-y-6">
                     <div className="bg-white p-6 border-2 border-black">
@@ -1673,7 +1830,9 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
                                     <XAxis dataKey="name" stroke="#000" fontSize={10} tickLine={false} axisLine={false} />
                                     <YAxis stroke="#000" fontSize={10} tickLine={false} axisLine={false} />
                                     <Tooltip cursor={{fill: '#fefce8'}} contentStyle={{ background: '#000', color: '#fff', border: 'none', fontWeight: 'bold' }} />
-                                    <Bar dataKey="registrations" fill="#FACC15" radius={[0, 0, 0, 0]} barSize={40} stroke="#000" strokeWidth={2} />
+                                    <Legend />
+                                    <Bar dataKey="registrations" name="Event Registrations" fill="#FACC15" radius={[4, 4, 0, 0]} barSize={20} />
+                                    <Bar dataKey="members" name="Club Members" fill="#000000" radius={[4, 4, 0, 0]} barSize={20} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
@@ -1728,7 +1887,129 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout }: { user: User, acti
     );
 };
 
-const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: User, refreshData: () => void, activeTab: string, onLogout: () => void }) => {
+const VenueManagerDashboard = ({ user, activeTab, onLogout, addNotification }: { user: User, activeTab: string, onLogout: () => void, addNotification: (userId: string, title: string, message: string, type?: any) => void }) => {
+    const [events, setEvents] = useState<Event[]>([]);
+    const [showProfileEdit, setShowProfileEdit] = useState(false);
+    const [currentUser, setCurrentUser] = useState(user);
+    const [venues, setVenues] = useState<Venue[]>([]);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            const allEvents = await api.events.list();
+            setEvents(allEvents);
+            const allVenues = await api.venues.list();
+            setVenues(allVenues);
+        };
+        fetchData();
+    }, []);
+
+    const myVenueId = user.venueId;
+    const myVenueEvents = events.filter(e => e.venueId === myVenueId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const pendingEvents = myVenueEvents.filter(e => e.status === EventStatus.PENDING);
+
+    const handleApprove = async (id: string) => {
+        // AI Conflict Detection (Simple Overlap Check)
+        const eventToApprove = events.find(e => e.id === id);
+        if (!eventToApprove) return;
+
+        const conflict = myVenueEvents.find(e => 
+            e.id !== id && 
+            (e.status === EventStatus.APPROVED || e.status === EventStatus.VENUE_APPROVED) &&
+            e.date === eventToApprove.date &&
+            e.time === eventToApprove.time
+        );
+
+        if (conflict) {
+            alert(`Conflict detected with event: ${conflict.title} at ${conflict.time}`);
+            return;
+        }
+
+        await api.events.updateStatus(id, EventStatus.VENUE_APPROVED);
+        setEvents(events.map(e => e.id === id ? { ...e, status: EventStatus.VENUE_APPROVED } : e));
+        addNotification(user.id, "Event Approved", `You approved "${eventToApprove.title}" for your venue.`, 'success');
+    };
+
+    const handleReject = async (id: string) => {
+        const reason = prompt("Enter rejection reason:");
+        if (!reason) return;
+        await api.events.updateStatus(id, EventStatus.REJECTED, reason);
+        setEvents(events.map(e => e.id === id ? { ...e, status: EventStatus.REJECTED, rejectionReason: reason } : e));
+    };
+
+    const handleUpdateProfile = async (data: Partial<User>) => {
+        try {
+            const updatedUser = { ...currentUser, ...data };
+            await api.auth.updateProfile(updatedUser);
+            setCurrentUser(updatedUser);
+            setShowProfileEdit(false);
+        } catch(e) {
+            alert("Failed to update profile");
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            {activeTab === 'venue_events' && (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-2xl font-black uppercase text-black">Venue Schedule</h2>
+                        <div className="bg-yellow-400 px-3 py-1 text-xs font-bold uppercase border border-black">
+                            {venues.find(v => v.id === myVenueId)?.name || 'My Venue'}
+                        </div>
+                    </div>
+
+                    <div className="space-y-4">
+                        <h3 className="font-bold uppercase border-b border-gray-300 pb-2">Pending Requests</h3>
+                        {pendingEvents.length === 0 ? <p className="text-gray-500 italic">No pending requests.</p> : 
+                            pendingEvents.map(event => (
+                                <div key={event.id} className="bg-white border-l-4 border-yellow-400 p-4 shadow-sm flex justify-between items-center text-black">
+                                    <div>
+                                        <h3 className="font-bold text-lg">{event.title}</h3>
+                                        <p className="text-xs text-gray-500">{event.organizer} • {event.date} @ {event.time}</p>
+                                        <p className="text-sm mt-1">{event.description}</p>
+                                        <div className="mt-2 flex gap-2">
+                                            <span className="text-[10px] bg-gray-100 px-2 py-1 rounded font-mono">Cap: {event.capacity}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2 flex-col">
+                                        <button onClick={() => handleApprove(event.id)} className="bg-black text-white px-4 py-2 font-bold text-xs uppercase hover:bg-gray-800 flex items-center gap-1">
+                                            <Check size={14} /> Accept
+                                        </button>
+                                        <button onClick={() => handleReject(event.id)} className="border-2 border-black text-black px-4 py-2 font-bold text-xs uppercase hover:bg-gray-100 flex items-center gap-1">
+                                            <X size={14} /> Reject
+                                        </button>
+                                    </div>
+                                </div>
+                            ))
+                        }
+                    </div>
+
+                    <div className="space-y-4 pt-6">
+                        <h3 className="font-bold uppercase border-b border-gray-300 pb-2">Upcoming Approved Events</h3>
+                        {myVenueEvents.filter(e => e.status === EventStatus.APPROVED || e.status === EventStatus.VENUE_APPROVED).map(event => (
+                             <div key={event.id} className="bg-gray-50 border border-gray-200 p-4 flex justify-between items-center text-black opacity-75">
+                                <div>
+                                    <h3 className="font-bold">{event.title}</h3>
+                                    <p className="text-xs text-gray-500">{event.date} @ {event.time}</p>
+                                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 ${event.status === EventStatus.APPROVED ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                        {event.status === EventStatus.APPROVED ? 'Final Approved' : 'Venue Approved'}
+                                    </span>
+                                </div>
+                             </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'profile' && (
+                <ProfileView user={currentUser} onEdit={() => setShowProfileEdit(true)} onLogout={onLogout} />
+            )}
+            <EditProfileModal isOpen={showProfileEdit} onClose={() => setShowProfileEdit(false)} user={currentUser} onUpdate={handleUpdateProfile} />
+        </div>
+    );
+};
+
+const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout, addNotification }: { user: User, refreshData: () => void, activeTab: string, onLogout: () => void, addNotification: (userId: string, title: string, message: string, type?: any) => void }) => {
     // ... (Most of ClubAdminDashboard remains, focused on Modal changes)
     const [events, setEvents] = useState<Event[]>([]);
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -1749,7 +2030,7 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
     const [venues, setVenues] = useState<Venue[]>([]);
     const [editingEventId, setEditingEventId] = useState<string | null>(null);
     const [mediaEventId, setMediaEventId] = useState('');
-    const [mediaUrl, setMediaUrl] = useState('');
+    const [mediaUrls, setMediaUrls] = useState<string[]>([]);
     const [mediaCaption, setMediaCaption] = useState('');
     const [posterEvent, setPosterEvent] = useState<Event | null>(null);
     const [winners, setWinners] = useState<Winner[]>([
@@ -1874,6 +2155,7 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
                 volunteersNeeded: newProposal.volunteersNeeded
             };
             await api.events.create(event);
+            addNotification(user.id, "Proposal Submitted", `Your event proposal "${event.title}" has been submitted for approval.`, 'info');
             alert("Proposal submitted for College Admin approval.");
         }
         setIsProposalModalOpen(false);
@@ -1902,19 +2184,20 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
 
     const handleUploadMedia = async (e: React.FormEvent) => {
         e.preventDefault();
-        if(!mediaEventId || !mediaUrl || !user.clubId) return;
+        if(!mediaEventId || mediaUrls.length === 0 || !user.clubId) return;
         const newMedia: MediaPost = {
             id: `m${Date.now()}`,
             clubId: user.clubId,
             eventId: mediaEventId,
-            imageUrl: mediaUrl,
+            imageUrls: mediaUrls, // Use array of URLs
             caption: mediaCaption || 'Event Highlights',
             likedBy: [],
-            comments: []
+            comments: [],
+            timestamp: new Date().toISOString()
         };
         await api.media.create(newMedia);
         setMediaList([...mediaList, newMedia]);
-        setMediaUrl('');
+        setMediaUrls([]);
         setMediaEventId('');
         setMediaCaption('');
         alert("Media Uploaded!");
@@ -2159,9 +2442,13 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
                             </select>
                             
                             <ImageUpload 
-                                label="Upload Image"
-                                onImageSelected={setMediaUrl}
-                                currentImage={mediaUrl}
+                                label="Upload Image(s)"
+                                onImageSelected={(res) => {
+                                    if (Array.isArray(res)) setMediaUrls(res);
+                                    else setMediaUrls([res]);
+                                }}
+                                currentImage={mediaUrls}
+                                multiple={true}
                             />
                         </div>
                         <input 
@@ -2180,13 +2467,20 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
                 
                 <h3 className="text-xl font-black mt-8 mb-4 border-b-2 border-gray-200 pb-2 text-black">YOUR POSTS</h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {mediaList.map(m => (
+                    {mediaList.map(m => {
+                        const images = m.imageUrls || (m.imageUrl ? [m.imageUrl] : []);
+                        return (
                         <div key={m.id} className="relative group border-2 border-black">
                             <img 
-                                src={m.imageUrl} 
+                                src={images[0]} 
                                 onError={(e) => { e.currentTarget.src = "https://via.placeholder.com/800x600/000000/FACC15?text=MEDIA"; }}
                                 className="w-full h-48 object-cover" 
                             />
+                            {images.length > 1 && (
+                                <div className="absolute top-2 right-2 bg-black/70 text-white px-2 py-1 text-xs font-bold rounded">
+                                    +{images.length - 1}
+                                </div>
+                            )}
                             <div className="absolute bottom-0 left-0 w-full bg-black/80 text-white p-3 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
                                 <p className="font-bold truncate mb-1">{m.caption}</p>
                                 <p className="text-gray-400 text-[10px] uppercase truncate">{events.find(e => e.id === m.eventId)?.title}</p>
@@ -2196,7 +2490,8 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
                                 </div>
                             </div>
                         </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
         )}
@@ -2504,10 +2799,102 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout }: { user: 
 // ... LoginPage, SignupPage, App ...
 // (Providing full file content is safest)
 
+const ForgotPasswordModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
+    const [step, setStep] = useState(1);
+    const [email, setEmail] = useState('');
+    const [otp, setOtp] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleSendOtp = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            const code = await api.auth.sendOtp(email);
+            setStep(2);
+            alert(`OTP sent to ${email}.\n(For demo: ${code})`);
+        } catch (err: any) {
+            alert(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVerifyOtp = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            await api.auth.verifyOtp(email, otp);
+            setStep(3);
+        } catch (err: any) {
+            alert(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResetPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            await api.auth.resetPassword(email, newPassword);
+            alert('Password reset successfully!');
+            onClose();
+            setStep(1);
+            setEmail('');
+            setOtp('');
+            setNewPassword('');
+        } catch (err: any) {
+            alert(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Reset Password">
+            {step === 1 && (
+                <form onSubmit={handleSendOtp} className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold uppercase mb-1">Email</label>
+                        <input className="w-full p-2 border-2 border-gray-200 text-black" type="email" required value={email} onChange={e => setEmail(e.target.value)} />
+                    </div>
+                    <button disabled={loading} className="w-full bg-black text-white py-3 font-bold uppercase hover:bg-gray-800">
+                        {loading ? <Loader2 className="animate-spin mx-auto"/> : 'Send OTP'}
+                    </button>
+                </form>
+            )}
+            {step === 2 && (
+                <form onSubmit={handleVerifyOtp} className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold uppercase mb-1">Enter OTP</label>
+                        <input className="w-full p-2 border-2 border-gray-200 text-black" required value={otp} onChange={e => setOtp(e.target.value)} />
+                    </div>
+                    <button className="w-full bg-black text-white py-3 font-bold uppercase hover:bg-gray-800">Verify OTP</button>
+                </form>
+            )}
+            {step === 3 && (
+                <form onSubmit={handleResetPassword} className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold uppercase mb-1">New Password</label>
+                        <input className="w-full p-2 border-2 border-gray-200 text-black" type="password" required value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                    </div>
+                    <button disabled={loading} className="w-full bg-black text-white py-3 font-bold uppercase hover:bg-gray-800">
+                        {loading ? <Loader2 className="animate-spin mx-auto"/> : 'Reset Password'}
+                    </button>
+                </form>
+            )}
+        </Modal>
+    );
+};
+
 const LoginPage = ({ onLogin, onSwitchToSignup }: { onLogin: (u: User) => void, onSwitchToSignup: () => void }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showForgot, setShowForgot] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -2545,6 +2932,9 @@ const LoginPage = ({ onLogin, onSwitchToSignup }: { onLogin: (u: User) => void, 
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                         />
+                        <div className="text-right mt-1">
+                            <button type="button" onClick={() => setShowForgot(true)} className="text-xs font-bold underline text-gray-500 hover:text-black">Forgot Password?</button>
+                        </div>
                     </div>
                     <button disabled={loading} className="w-full bg-black text-white py-4 font-black uppercase hover:bg-gray-800 transition">
                         {loading ? <Loader2 className="animate-spin mx-auto"/> : 'Login'}
@@ -2555,6 +2945,7 @@ const LoginPage = ({ onLogin, onSwitchToSignup }: { onLogin: (u: User) => void, 
                     <button onClick={onSwitchToSignup} className="text-sm font-bold underline">Create an account</button>
                 </div>
             </div>
+            <ForgotPasswordModal isOpen={showForgot} onClose={() => setShowForgot(false)} />
         </div>
     );
 };
@@ -2696,6 +3087,27 @@ const App = () => {
     const [authView, setAuthView] = useState<'login' | 'signup'>('login');
     const [activeTab, setActiveTab] = useState('feed');
     const [splash, setSplash] = useState(true);
+    const [notifications, setNotifications] = useState<Notification[]>(() => {
+        const saved = localStorage.getItem('notifications');
+        return saved ? JSON.parse(saved) : [];
+    });
+
+    useEffect(() => {
+        localStorage.setItem('notifications', JSON.stringify(notifications));
+    }, [notifications]);
+
+    const addNotification = (userId: string, title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+        const newNotif: Notification = {
+            id: `n${Date.now()}`,
+            userId,
+            title,
+            message,
+            timestamp: new Date().toISOString(),
+            read: false,
+            type
+        };
+        setNotifications(prev => [newNotif, ...prev]);
+    };
 
     useEffect(() => {
         // Mock splash screen timer
@@ -2712,6 +3124,7 @@ const App = () => {
         if (u.role === UserRole.STUDENT) setActiveTab('feed');
         else if (u.role === UserRole.CLUB_ADMIN) setActiveTab('dashboard');
         else if (u.role === UserRole.COLLEGE_ADMIN) setActiveTab('approvals');
+        else if (u.role === UserRole.VENUE_MANAGER) setActiveTab('venue_events');
     };
 
     const handleLogout = () => {
@@ -2731,10 +3144,18 @@ const App = () => {
     if (!user) return null;
 
     return (
-      <Layout user={user} onLogout={handleLogout} activeTab={activeTab} setActiveTab={setActiveTab}>
-        {user.role === UserRole.STUDENT && <StudentDashboard user={user} activeTab={activeTab} onLogout={handleLogout} />}
-        {user.role === UserRole.CLUB_ADMIN && <ClubAdminDashboard user={user} refreshData={() => {}} activeTab={activeTab} onLogout={handleLogout} />}
-        {user.role === UserRole.COLLEGE_ADMIN && <CollegeAdminDashboard user={user} activeTab={activeTab} onLogout={handleLogout} />}
+      <Layout 
+        user={user} 
+        onLogout={handleLogout} 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab}
+        notifications={notifications.filter(n => n.userId === user.id)}
+        onClearNotifications={() => setNotifications(prev => prev.filter(n => n.userId !== user.id))}
+      >
+        {user.role === UserRole.STUDENT && <StudentDashboard user={user} activeTab={activeTab} onLogout={handleLogout} addNotification={addNotification} />}
+        {user.role === UserRole.CLUB_ADMIN && <ClubAdminDashboard user={user} refreshData={() => {}} activeTab={activeTab} onLogout={handleLogout} addNotification={addNotification} />}
+        {user.role === UserRole.COLLEGE_ADMIN && <CollegeAdminDashboard user={user} activeTab={activeTab} onLogout={handleLogout} addNotification={addNotification} />}
+        {user.role === UserRole.VENUE_MANAGER && <VenueManagerDashboard user={user} activeTab={activeTab} onLogout={handleLogout} addNotification={addNotification} />}
       </Layout>
     );
 };

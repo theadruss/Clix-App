@@ -67,19 +67,23 @@ export const MOCK_MEDIA: MediaPost[] = [
     id: 'm1',
     clubId: 'c1',
     eventId: 'e1',
+    imageUrls: ['https://picsum.photos/800/600?random=50'],
     imageUrl: 'https://picsum.photos/800/600?random=50',
     caption: 'Winners of Hackathon 2023! 🏆',
     likedBy: ['u1', 'u3'],
-    comments: [{ id: 'cm1', userId: 'u1', userName: 'Alex', text: 'Great event!', timestamp: '2023-05-16' }]
+    comments: [{ id: 'cm1', userId: 'u1', userName: 'Alex', text: 'Great event!', timestamp: '2023-05-16' }],
+    timestamp: '2023-05-16T10:00:00Z'
   },
   {
     id: 'm2',
     clubId: 'c2',
     eventId: 'e2',
+    imageUrls: ['https://picsum.photos/800/600?random=51'],
     imageUrl: 'https://picsum.photos/800/600?random=51',
     caption: 'Jamming session at the OAT 🎸',
     likedBy: ['u1', 'u2', 'u5'],
-    comments: []
+    comments: [],
+    timestamp: '2023-05-21T18:30:00Z'
   }
 ];
 
@@ -117,6 +121,17 @@ export const MOCK_USERS: User[] = [
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Dean',
     bio: 'Overseeing campus activities and student welfare.',
     joinDate: '2020-01-01',
+    joinedClubIds: []
+  },
+  { 
+    id: 'u4', 
+    name: 'Venue Manager', 
+    email: 'venue@college.edu',
+    role: UserRole.VENUE_MANAGER, 
+    managedVenueId: 'v1',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Venue',
+    bio: 'Managing the Main Auditorium.',
+    joinDate: '2021-01-01',
     joinedClubIds: []
   },
 ];
@@ -165,7 +180,7 @@ export const INITIAL_EVENTS: Event[] = [
     date: '2024-06-01',
     time: '14:00',
     venueId: 'v2',
-    status: EventStatus.PENDING, // Pending Approval
+    status: EventStatus.PENDING_VENUE, // Pending Venue Approval
     capacity: 50,
     registeredCount: 0,
     image: 'https://picsum.photos/800/400?random=12',

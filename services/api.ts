@@ -12,6 +12,8 @@ const handleResponse = async <T>(promise: Promise<any>): Promise<T> => {
     return data as T;
 };
 
+const otpStore = new Map<string, { code: string, expires: number }>();
+
 export const api = {
   auth: {
     login: async (email: string, password: string): Promise<User> => {
@@ -52,6 +54,38 @@ export const api = {
         if (error) throw new Error(error.message);
         return user;
     },
+    resetPassword: async (email: string, password: string): Promise<void> => {
+        const { data } = await supabase.from('users').select('id').eq('email', email).single();
+        if (!data) throw new Error("User not found");
+        
+        const { error } = await supabase.from('users').update({ password }).eq('id', data.id);
+        if (error) throw new Error(error.message);
+    },
+    sendOtp: async (email: string): Promise<string> => {
+        const { data } = await supabase.from('users').select('id').eq('email', email).single();
+        if (!data) throw new Error("User not found");
+
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const expires = Date.now() + 5 * 60 * 1000; // 5 mins
+        otpStore.set(email, { code, expires });
+        
+        // Simulate email delay
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        console.log(`[OTP] Code for ${email}: ${code}`);
+        return code;
+    },
+    verifyOtp: async (email: string, code: string): Promise<void> => {
+        const record = otpStore.get(email);
+        if (!record) throw new Error("No OTP requested or expired");
+        if (Date.now() > record.expires) {
+            otpStore.delete(email);
+            throw new Error("OTP expired");
+        }
+        if (record.code !== code) throw new Error("Invalid OTP");
+        
+        otpStore.delete(email);
+    },
     getRegistrations: async (userId: string): Promise<string[]> => {
         const { data, error } = await supabase
             .from('registrations')
@@ -81,6 +115,11 @@ export const api = {
       updateUser: async (user: Partial<User>): Promise<void> => {
           const { error } = await supabase.from('users').update(user).eq('id', user.id);
           if (error) throw new Error(error.message);
+      },
+      listUsers: async (): Promise<User[]> => {
+          const { data, error } = await supabase.from('users').select('*');
+          if (error) throw new Error(error.message);
+          return data || [];
       }
   },
   events: {
@@ -172,9 +211,24 @@ export const api = {
   },
   clubs: {
     list: async (): Promise<Club[]> => {
-      const { data, error } = await supabase.from('clubs').select('*');
+      const { data: clubs, error } = await supabase.from('clubs').select('*');
       if (error) return [];
-      return data;
+      
+      // Fetch all users to calculate accurate member counts
+      const { data: users } = await supabase.from('users').select('joinedClubIds');
+      
+      if (users) {
+          return clubs.map((club: any) => {
+              const count = users.filter((u: any) => {
+                  if (!u.joinedClubIds) return false;
+                  if (Array.isArray(u.joinedClubIds)) return u.joinedClubIds.includes(club.id);
+                  if (typeof u.joinedClubIds === 'string') return u.joinedClubIds.includes(club.id);
+                  return false;
+              }).length;
+              return { ...club, memberCount: count };
+          });
+      }
+      return clubs;
     },
     join: async (clubId: string, userId: string): Promise<User> => {
         const { data: user } = await supabase.from('users').select('*').eq('id', userId).single();

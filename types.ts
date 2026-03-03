@@ -2,11 +2,13 @@
 export enum UserRole {
   STUDENT = 'STUDENT',
   CLUB_ADMIN = 'CLUB_ADMIN',
-  COLLEGE_ADMIN = 'COLLEGE_ADMIN'
+  COLLEGE_ADMIN = 'COLLEGE_ADMIN',
+  VENUE_MANAGER = 'VENUE_MANAGER'
 }
 
 export enum EventStatus {
   PENDING = 'PENDING',
+  VENUE_APPROVED = 'VENUE_APPROVED',
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
   COMPLETED = 'COMPLETED'
@@ -25,6 +27,7 @@ export interface User {
   role: UserRole;
   avatar?: string;
   clubId?: string; // If club admin
+  venueId?: string; // If venue manager
   bio?: string;
   joinDate?: string;
   joinedClubIds?: string[];
@@ -114,10 +117,12 @@ export interface MediaPost {
   id: string;
   clubId: string;
   eventId: string;
-  imageUrl: string;
+  imageUrls: string[]; 
+  imageUrl?: string; // Backward compatibility
   caption: string;
   likedBy: string[]; // Array of user IDs
   comments: Comment[];
+  timestamp: string; 
 }
 
 export interface Proposal {
@@ -138,4 +143,14 @@ export interface VolunteerApplication {
   userAvatar?: string;
   status: VolunteerStatus;
   appliedAt: string;
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+  type: 'system' | 'event' | 'club';
 }

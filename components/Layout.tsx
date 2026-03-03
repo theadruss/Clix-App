@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { User, UserRole } from '../types';
+import { User, UserRole, Notification } from '../types';
 import { 
   LayoutDashboard, 
   Calendar, 
@@ -13,7 +13,8 @@ import {
   Shield,
   Briefcase,
   Image as ImageIcon,
-  Bell
+  Bell,
+  X
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -22,9 +23,11 @@ interface LayoutProps {
   onLogout: () => void;
   activeTab: string;
   setActiveTab: (id: string) => void;
+  notifications?: Notification[];
+  onClearNotifications?: () => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, user, activeTab, setActiveTab }) => {
+const Layout: React.FC<LayoutProps> = ({ children, user, activeTab, setActiveTab, notifications = [], onClearNotifications }) => {
   const [showNotifs, setShowNotifs] = useState(false);
 
   const navItems = {
@@ -45,7 +48,12 @@ const Layout: React.FC<LayoutProps> = ({ children, user, activeTab, setActiveTab
     [UserRole.COLLEGE_ADMIN]: [
       { icon: CheckSquare, label: 'Approval', id: 'approvals' },
       { icon: Shield, label: 'Clubs', id: 'clubs_manage' },
+      { icon: Users, label: 'Users', id: 'users' },
       { icon: BarChart3, label: 'Report', id: 'reports' },
+      { icon: UserIcon, label: 'Profile', id: 'profile' },
+    ],
+    [UserRole.VENUE_MANAGER]: [
+      { icon: Calendar, label: 'Events', id: 'venue_events' },
       { icon: UserIcon, label: 'Profile', id: 'profile' },
     ]
   };
@@ -53,8 +61,11 @@ const Layout: React.FC<LayoutProps> = ({ children, user, activeTab, setActiveTab
   const roleLabel = {
     [UserRole.STUDENT]: 'Student',
     [UserRole.CLUB_ADMIN]: 'Club Admin',
-    [UserRole.COLLEGE_ADMIN]: 'College Admin'
+    [UserRole.COLLEGE_ADMIN]: 'College Admin',
+    [UserRole.VENUE_MANAGER]: 'Venue Manager'
   };
+
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 text-black font-sans">
@@ -62,8 +73,12 @@ const Layout: React.FC<LayoutProps> = ({ children, user, activeTab, setActiveTab
       {/* Top Header - Branding & Notification */}
       <header className="fixed top-0 w-full z-20 bg-black text-white px-4 py-3 flex justify-between items-center border-b-2 border-yellow-500 shadow-md">
          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-yellow-400 rounded-sm flex items-center justify-center text-black font-black text-xs border border-white">
-               {user.name.charAt(0)}
+            <div className="w-8 h-8 bg-yellow-400 rounded-sm flex items-center justify-center text-black font-black text-xs border border-white overflow-hidden">
+               {user.avatar ? (
+                 <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+               ) : (
+                 user.name.charAt(0)
+               )}
             </div>
             <div>
                <h1 className="text-2xl font-black tracking-tighter leading-none">CLIX<span className="text-yellow-400">.</span></h1>
@@ -78,8 +93,9 @@ const Layout: React.FC<LayoutProps> = ({ children, user, activeTab, setActiveTab
                 className="relative p-2 hover:bg-gray-800 rounded-full transition-colors group"
              >
                  <Bell size={20} className="text-white group-hover:text-yellow-400 transition-colors" />
-                 {/* Mock badge if items exist */}
-                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-black"></span>
+                 {unreadCount > 0 && (
+                   <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-black animate-pulse"></span>
+                 )}
              </button>
 
              {/* Notification Dropdown */}
@@ -87,19 +103,25 @@ const Layout: React.FC<LayoutProps> = ({ children, user, activeTab, setActiveTab
                  <div className="absolute top-12 right-0 w-72 bg-white border-2 border-black shadow-[4px_4px_0px_#000] z-50 animate-in fade-in slide-in-from-top-2 duration-200">
                      <div className="p-3 border-b-2 border-black bg-gray-50 flex justify-between items-center">
                          <h3 className="font-black text-xs uppercase tracking-widest text-black">Notifications</h3>
-                         <button onClick={() => setShowNotifs(false)} className="text-xs font-bold hover:text-red-500 text-black">Close</button>
+                         <div className="flex gap-2">
+                            {notifications.length > 0 && (
+                                <button onClick={onClearNotifications} className="text-xs font-bold hover:text-red-500 text-gray-500">Clear</button>
+                            )}
+                            <button onClick={() => setShowNotifs(false)} className="text-xs font-bold hover:text-red-500 text-black"><X size={14}/></button>
+                         </div>
                      </div>
                      <div className="max-h-64 overflow-y-auto p-2 space-y-2 text-black">
-                         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-2 text-xs">
-                             <p className="font-bold text-black">System</p>
-                             <p className="text-gray-800">Welcome to the new Clix platform!</p>
-                             <span className="text-[10px] text-gray-500">Just now</span>
-                         </div>
-                         <div className="bg-white border border-gray-200 p-2 text-xs">
-                             <p className="font-bold text-black">Event Reminder</p>
-                             <p className="text-gray-800">Don't forget to check out upcoming hackathons.</p>
-                             <span className="text-[10px] text-gray-500">2 hours ago</span>
-                         </div>
+                         {notifications.length === 0 ? (
+                             <p className="text-center text-xs text-gray-400 py-4 italic">No new notifications</p>
+                         ) : (
+                             notifications.map((notif) => (
+                                 <div key={notif.id} className={`p-2 text-xs border-l-4 ${notif.type === 'system' ? 'bg-yellow-50 border-yellow-400' : 'bg-white border-gray-200'}`}>
+                                     <p className="font-bold text-black">{notif.title}</p>
+                                     <p className="text-gray-800">{notif.message}</p>
+                                     <span className="text-[10px] text-gray-500">{new Date(notif.timestamp).toLocaleTimeString()}</span>
+                                 </div>
+                             ))
+                         )}
                      </div>
                  </div>
              )}

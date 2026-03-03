@@ -54,7 +54,6 @@ export const generateEventReport = async (title: string, stats: any, feedback: a
   1. Executive Summary
   2. Participation & Engagement Analysis
   3. Feedback Highlights
-  4. Recommendations for Future Events
 
   IMPORTANT: Do not use placeholders like [Insert Date] or fill-in-the-blanks. Use the provided data. If data is missing, make a reasonable professional assumption or omit the specific detail. Do not use asterisks for bolding, use standard Markdown headers. The tone should be formal and objective.`;
 
@@ -90,5 +89,29 @@ export const generateImage = async (prompt: string) => {
   } catch (e) {
     console.error("Image Generation Error:", e);
     return null;
+  }
+};
+
+export const checkVenueConflicts = async (venueName: string, date: string, time: string, existingEvents: any[]) => {
+  if (!process.env.API_KEY) return "API Key missing.";
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const model = "gemini-3-flash-preview";
+
+  const eventsStr = existingEvents.map(e => `- ${e.title} on ${e.date} at ${e.time}`).join('\n');
+  const prompt = `Analyze the following schedule for venue "${venueName}" and check for conflicts with a new event proposed for ${date} at ${time}.
+  
+  Existing Schedule:
+  ${eventsStr}
+  
+  New Event: ${date} at ${time}.
+  
+  If there is a conflict, explain it clearly. If not, confirm availability. Suggest alternative times if conflict exists. Keep it concise.`;
+
+  try {
+    const response = await ai.models.generateContent({ model, contents: prompt });
+    return response.text;
+  } catch (e) {
+    console.error(e);
+    return "Error checking conflicts.";
   }
 };
