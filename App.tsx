@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Layout from './components/Layout';
-import { UserRole, EventStatus, Event, User, Venue, Club, Post, VolunteerApplication, VolunteerStatus, Announcement, MediaPost, Feedback, Comment, Winner, Notification } from './types';
+import { UserRole, EventStatus, Event, User, Venue, Club, Post, VolunteerApplication, VolunteerStatus, Announcement, MediaPost, Feedback, Comment, Winner, Notification, EventCategory } from './types';
 import { MOCK_USERS } from './constants';
 import { api } from './services/api'; 
 import { generateEventContent, generateEventReport, generateImage } from './services/geminiService';
@@ -9,14 +9,14 @@ import {
   Calendar, MapPin, Clock, Users, Check, X, Search, Loader2, Sparkles, AlertCircle, TrendingUp,
   DollarSign, CheckSquare, Hand, Trophy, Megaphone, PlusCircle, Mail, Lock, ArrowRight, Edit,
   Save, MessageSquare, Heart, Send, ArrowLeft, FileText, Briefcase, LogOut, Filter, Star, QrCode, Image as ImageIcon,
-  Award, Download, Home, BarChart3, UserCog, Ticket, ChevronRight, Eye, ThumbsUp, LayoutGrid, FileText as ReportIcon, Palette, Share2, Plus, PenSquare, ExternalLink
+  Award, Download, Home, BarChart3, UserCog, Ticket, ChevronRight, Eye, EyeOff, ThumbsUp, LayoutGrid, FileText as ReportIcon, Palette, Share2, Plus, PenSquare, ExternalLink
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import QRCode from "react-qr-code";
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-import { Html5QrcodeScanner } from "html5-qrcode";
+import { Html5Qrcode } from "html5-qrcode";
 
 // --- Helpers ---
 
@@ -134,6 +134,40 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, large =
     );
 };
 
+const RejectionModal = ({ isOpen, onClose, onConfirm, loading }: { isOpen: boolean, onClose: () => void, onConfirm: (reason: string) => void, loading: boolean }) => {
+    const [reason, setReason] = useState('');
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onConfirm(reason);
+        setReason('');
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Reject Event">
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <p className="text-sm font-bold uppercase text-gray-500">Please provide a reason for rejection. This will be visible to the club.</p>
+                <textarea 
+                    className="w-full p-3 border-2 border-black font-bold focus:outline-none focus:bg-yellow-50 min-h-[100px]"
+                    placeholder="Enter reason here..."
+                    required
+                    value={reason}
+                    onChange={e => setReason(e.target.value)}
+                />
+                <div className="flex justify-end gap-2">
+                    <button type="button" onClick={onClose} className="px-4 py-2 font-bold uppercase border-2 border-black hover:bg-gray-100">Cancel</button>
+                    <button type="submit" disabled={loading} className="px-4 py-2 bg-red-600 text-white font-bold uppercase border-2 border-black hover:bg-red-700 flex items-center gap-2">
+                        {loading && <Loader2 className="animate-spin" size={16} />}
+                        Confirm Reject
+                    </button>
+                </div>
+            </form>
+        </Modal>
+    );
+};
+
 const PaymentModal = ({ isOpen, onClose, event, onConfirm }: { isOpen: boolean, onClose: () => void, event: Event | null, onConfirm: () => void }) => {
     const [processing, setProcessing] = useState(false);
     const [success, setSuccess] = useState(false);
@@ -226,6 +260,18 @@ const PaymentModal = ({ isOpen, onClose, event, onConfirm }: { isOpen: boolean, 
 };
 
 const TicketQRModal = ({ isOpen, onClose, event, user }: { isOpen: boolean, onClose: () => void, event: Event | null, user: User }) => {
+    const [attended, setAttended] = useState(false);
+
+    useEffect(() => {
+        if (isOpen && event && user) {
+            api.events.getAttendedUsers(event.id).then(users => {
+                setAttended(users.includes(user.id));
+            });
+        } else {
+            setAttended(false);
+        }
+    }, [isOpen, event, user]);
+
     if (!isOpen || !event) return null;
     const ticketData = JSON.stringify({ eventId: event.id, userId: user.id, userName: user.name, timestamp: new Date().toISOString() });
     return (
@@ -245,13 +291,18 @@ const TicketQRModal = ({ isOpen, onClose, event, user }: { isOpen: boolean, onCl
                     <p className="text-gray-500 font-bold text-sm">Role: {user.role}</p>
                     <p className="text-xs text-gray-400 mt-2">Scan this at the venue entrance</p>
                 </div>
-                {event.certificatesIssued && (
+                {event.certificatesIssued && attended && (
                     <div className="border-t-2 border-dashed border-gray-300 pt-6 mt-4">
                         <p className="font-bold text-lg mb-2">Certificate Available!</p>
                         <button className="bg-yellow-400 text-black px-6 py-3 font-bold uppercase tracking-widest border-2 border-black hover:bg-yellow-300 flex items-center gap-2 mx-auto" onClick={() => { onClose(); }}>
                             <Award size={20} /> View Certificate
                         </button>
                         <p className="text-xs text-gray-400 mt-2">Check 'Profile' to access.</p>
+                    </div>
+                )}
+                {event.certificatesIssued && !attended && (
+                    <div className="border-t-2 border-dashed border-gray-300 pt-6 mt-4">
+                        <p className="text-gray-500 text-sm italic">Certificate available for verified attendees.</p>
                     </div>
                 )}
             </div>
@@ -267,7 +318,7 @@ const CertificateModal = ({ isOpen, onClose, event, user }: { isOpen: boolean, o
         if (!element) return;
         
         try {
-            const canvas = await html2canvas(element, { scale: 2 });
+            const canvas = await html2canvas(element, { scale: 2, useCORS: true });
             const imgData = canvas.toDataURL('image/png');
             const pdf = new jsPDF('l', 'mm', 'a4');
             const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -282,10 +333,19 @@ const CertificateModal = ({ isOpen, onClose, event, user }: { isOpen: boolean, o
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Certificate of Completion" large>
-            <div id="certificate-content" className="bg-white p-10 border-8 border-double border-yellow-400 text-center relative overflow-hidden">
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
-                     <Award size={400} />
-                </div>
+            <div id="certificate-content" className="bg-white p-10 border-8 border-double border-yellow-400 text-center relative overflow-hidden min-h-[500px] flex flex-col justify-center">
+                {event.certificateTemplate ? (
+                    <img 
+                        src={event.certificateTemplate} 
+                        alt="Certificate Background" 
+                        className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none"
+                        crossOrigin="anonymous"
+                    />
+                ) : (
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
+                         <Award size={400} />
+                    </div>
+                )}
                 <div className="relative z-10 text-black">
                     <div className="mb-8">
                          <h1 className="text-5xl font-black uppercase tracking-tight mb-2">Certificate</h1>
@@ -306,12 +366,12 @@ const CertificateModal = ({ isOpen, onClose, event, user }: { isOpen: boolean, o
                             <p className="text-xs font-bold uppercase">Faculty Advisor</p>
                         </div>
                     </div>
-                     <div className="mt-12">
-                         <button onClick={handleDownload} className="bg-black text-white px-6 py-3 font-bold uppercase tracking-widest hover:bg-gray-800 flex items-center gap-2 mx-auto">
-                            <Download size={18} /> Download PDF
-                         </button>
-                    </div>
                 </div>
+            </div>
+            <div className="mt-6 flex justify-center">
+                 <button onClick={handleDownload} className="bg-black text-white px-6 py-3 font-bold uppercase tracking-widest hover:bg-gray-800 flex items-center gap-2">
+                    <Download size={18} /> Download PDF
+                 </button>
             </div>
         </Modal>
     );
@@ -393,11 +453,20 @@ const EventManagementModal = ({ isOpen, onClose, event, volunteers, registeredUs
     const [generatingReport, setGeneratingReport] = useState(false);
     const [attendedUsers, setAttendedUsers] = useState<string[]>([]);
     const [scanning, setScanning] = useState(false);
+    const [eventMedia, setEventMedia] = useState<MediaPost[]>([]);
 
     useEffect(() => {
         setReport(null);
         setAttendedUsers([]);
         setScanning(false);
+        if (event) {
+            api.media.list().then(allMedia => {
+                setEventMedia(allMedia.filter(m => m.eventId === event.id));
+            });
+            api.events.getAttendedUsers(event.id).then(users => {
+                setAttendedUsers(users);
+            });
+        }
     }, [event?.id]);
 
     const registeredUsersRef = useRef(registeredUsers);
@@ -409,58 +478,85 @@ const EventManagementModal = ({ isOpen, onClose, event, volunteers, registeredUs
     }, [registeredUsers, attendedUsers]);
 
     useEffect(() => {
-        let scanner: Html5QrcodeScanner | null = null;
-        if (scanning && event) {
-            const timer = setTimeout(() => {
-                const element = document.getElementById("reader");
-                if (element) {
-                    try {
-                        scanner = new Html5QrcodeScanner(
-                            "reader",
-                            { fps: 10, qrbox: { width: 250, height: 250 } },
-                            /* verbose= */ false
-                        );
-                        scanner.render((decodedText) => {
-                            const currentRegistered = registeredUsersRef.current;
-                            const currentAttended = attendedUsersRef.current;
-                            
-                            // Check if decodedText is valid JSON
-                            let userId = decodedText;
-                            try {
-                                const data = JSON.parse(decodedText);
-                                if (data.userId) userId = data.userId;
-                            } catch (e) {
-                                // Not JSON, assume it's ID
-                            }
+        let scanner: Html5Qrcode | null = null;
+        let isMounted = true;
 
-                            const user = currentRegistered.find(u => u.id === userId || userId.includes(u.id));
-                            if (user) {
-                                if (!currentAttended.includes(user.id)) {
-                                    setAttendedUsers(prev => [...prev, user.id]);
-                                    alert(`Verified: ${user.name}`);
-                                } else {
-                                    alert(`Already verified: ${user.name}`);
-                                }
-                            } else {
-                                alert("Invalid Ticket or User not registered.");
-                            }
-                        }, (error) => {
-                            // console.warn(error);
-                        });
+        const startScanner = async () => {
+            if (!scanning || !event) return;
+
+            // Wait for div to be rendered
+            await new Promise(r => setTimeout(r, 100));
+            const element = document.getElementById("reader");
+            if (!element || !isMounted) return;
+
+            try {
+                // Clear existing instance if any
+                try { await new Html5Qrcode("reader").clear(); } catch(e) {}
+
+                scanner = new Html5Qrcode("reader");
+                
+                const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+                const onScanSuccess = (decodedText: string) => {
+                    if (!isMounted) return;
+
+                    const currentRegistered = registeredUsersRef.current;
+                    const currentAttended = attendedUsersRef.current;
+                    
+                    let userId = decodedText;
+                    try {
+                        const data = JSON.parse(decodedText);
+                        if (data.userId) userId = data.userId;
                     } catch (e) {
-                        console.error("Scanner init failed", e);
+                        // Not JSON, assume it's ID
+                    }
+
+                    const user = currentRegistered.find(u => u.id === userId || userId.includes(u.id));
+                    if (user) {
+                        if (!currentAttended.includes(user.id)) {
+                            api.events.markAttended(event.id, user.id).then(() => {
+                                setAttendedUsers(prev => [...prev, user.id]);
+                                alert(`Verified: ${user.name}`);
+                            }).catch(err => alert("Failed to save attendance: " + err.message));
+                        } else {
+                            alert(`Already verified: ${user.name}`);
+                        }
+                    } else {
+                        alert("Invalid Ticket or User not registered.");
+                    }
+                };
+
+                try {
+                    // Try without specific facingMode first to let browser/device decide
+                    await scanner.start({ facingMode: "environment" }, config, onScanSuccess, () => {});
+                } catch (err) {
+                    console.warn("Environment camera failed, trying user camera...", err);
+                    if (!isMounted) return;
+                    try {
+                        await scanner.start({ facingMode: "user" }, config, onScanSuccess, () => {});
+                    } catch (err2) {
+                        console.error("All camera attempts failed", err2);
+                        if (isMounted) {
+                            alert("Failed to start camera. Please ensure camera permissions are allowed.");
+                            setScanning(false);
+                        }
                     }
                 }
-            }, 300);
+            } catch (e) {
+                console.error("Scanner init error", e);
+            }
+        };
 
-            return () => {
-                clearTimeout(timer);
-                if (scanner) {
-                    scanner.clear().catch(error => console.error("Failed to clear scanner", error));
-                }
-            };
+        if (scanning) {
+            startScanner();
         }
-    }, [scanning, event]);
+
+        return () => {
+            isMounted = false;
+            if (scanner && scanner.isScanning) {
+                scanner.stop().then(() => scanner?.clear()).catch(err => console.error("Failed to stop scanner", err));
+            }
+        };
+    }, [scanning, event?.id]);
 
     const handleDownloadParticipants = () => {
         if (!event) return;
@@ -505,15 +601,75 @@ const EventManagementModal = ({ isOpen, onClose, event, volunteers, registeredUs
         setGeneratingReport(false);
     };
 
-    const handleDownloadReport = () => {
-        if (!report) return;
-        const blob = new Blob([report], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${event.title}-Report.txt`;
-        a.click();
-        URL.revokeObjectURL(url);
+    const handleDownloadReport = async () => {
+        if (!report || !event) return;
+        
+        const doc = new jsPDF();
+        doc.setFontSize(18);
+        doc.text(`Event Report: ${event.title}`, 20, 20);
+        
+        doc.setFontSize(12);
+        doc.text(`Date: ${event.date}`, 20, 30);
+        doc.text(`Registrations: ${event.registeredCount} / ${event.capacity}`, 20, 36);
+        doc.text(`Revenue: ₹${event.registeredCount * event.price}`, 20, 42);
+        
+        doc.setFontSize(14);
+        doc.text("Analysis", 20, 55);
+        
+        doc.setFontSize(10);
+        const splitText = doc.splitTextToSize(report, 170);
+        doc.text(splitText, 20, 65);
+        
+        let y = 65 + (splitText.length * 5) + 20;
+
+        if (eventMedia.length > 0) {
+            doc.addPage();
+            y = 20;
+            doc.setFontSize(16);
+            doc.text("Event Gallery", 20, y);
+            y += 15;
+
+            for (const media of eventMedia) {
+                const images = media.imageUrls || (media.imageUrl ? [media.imageUrl] : []);
+                for (const imgUrl of images) {
+                    try {
+                        const response = await fetch(imgUrl);
+                        const blob = await response.blob();
+                        const base64 = await new Promise<string>((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result as string);
+                            reader.readAsDataURL(blob);
+                        });
+
+                        let format = 'JPEG';
+                        if (base64.startsWith('data:image/png')) format = 'PNG';
+                        else if (base64.startsWith('data:image/webp')) format = 'WEBP';
+
+                        const imgProps = doc.getImageProperties(base64);
+                        const pdfWidth = 170;
+                        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                        
+                        if (y + pdfHeight > 280) {
+                            doc.addPage();
+                            y = 20;
+                        }
+                        
+                        doc.addImage(base64, format, 20, y, pdfWidth, pdfHeight);
+                        y += pdfHeight + 5;
+                        
+                        if (media.caption) {
+                            doc.setFontSize(10);
+                            doc.text(media.caption, 20, y);
+                            y += 10;
+                        }
+                    } catch (e) {
+                        console.error("Failed to add image to report", e);
+                    }
+                }
+            }
+        }
+
+        doc.save(`${event.title}-Report.pdf`);
     };
 
     if (!isOpen || !event) return null;
@@ -638,7 +794,7 @@ const EventManagementModal = ({ isOpen, onClose, event, volunteers, registeredUs
                                     onClick={handleDownloadReport}
                                     className="bg-white border-2 border-black text-black px-4 py-2 text-xs font-bold uppercase hover:bg-gray-100 flex items-center gap-2"
                                 >
-                                    <Download size={14} /> Download
+                                    <Download size={14} /> Download PDF
                                 </button>
                             )}
                         </div>
@@ -806,9 +962,9 @@ const ProfileView = ({ user, onLogout, onEdit }: { user: User, onLogout: () => v
   useEffect(() => {
       const fetchCerts = async () => {
           const allEvents = await api.events.list();
-          const myRegs = await api.auth.getRegistrations(user.id);
+          const attendedEventIds = await api.auth.getAttendedEvents(user.id);
           const myCerts = allEvents.filter(e => 
-              myRegs.includes(e.id) && 
+              attendedEventIds.includes(e.id) && 
               e.certificatesIssued && 
               e.status === EventStatus.COMPLETED
           );
@@ -1192,17 +1348,27 @@ const StudentClubDetail = ({ club, onBack, user, onUpdateUser, readOnly = false,
 
 const StudentMediaView = ({ user }: { user: User }) => {
     const [media, setMedia] = useState<MediaPost[]>([]);
+    const [clubs, setClubs] = useState<Club[]>([]);
     const [loading, setLoading] = useState(true);
     const [newComment, setNewComment] = useState("");
     const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
     const [currentImageIndices, setCurrentImageIndices] = useState<{[key: string]: number}>({});
 
     useEffect(() => {
-        api.media.list().then(m => {
+        Promise.all([
+            api.media.list(),
+            api.clubs.list()
+        ]).then(([m, c]) => {
             setMedia(m.reverse()); // Newest first
+            setClubs(c);
             setLoading(false);
         });
     }, []);
+
+    const getClubName = (clubId: string) => {
+        const club = clubs.find(c => c.id === clubId);
+        return club ? club.name : 'Unknown Club';
+    };
 
     const handleLike = async (m: MediaPost) => {
         const isLiked = m.likedBy.includes(user.id);
@@ -1267,11 +1433,15 @@ const StudentMediaView = ({ user }: { user: User }) => {
                     <div key={item.id} className="bg-white border-2 border-black shadow-[4px_4px_0px_#000] text-black overflow-hidden">
                         {/* Header */}
                         <div className="p-3 flex items-center gap-3 border-b-2 border-black bg-gray-50">
-                            <div className="w-8 h-8 rounded-full bg-yellow-400 border border-black flex items-center justify-center font-bold text-xs">
-                                {item.clubId.substring(0, 2).toUpperCase()}
+                            <div className="w-8 h-8 rounded-full bg-yellow-400 border border-black flex items-center justify-center font-bold text-xs overflow-hidden">
+                                {clubs.find(c => c.id === item.clubId)?.logo ? (
+                                    <img src={clubs.find(c => c.id === item.clubId)?.logo} className="w-full h-full object-cover" />
+                                ) : (
+                                    getClubName(item.clubId).substring(0, 2).toUpperCase()
+                                )}
                             </div>
                             <div>
-                                <p className="font-bold text-sm">Club Name</p> 
+                                <p className="font-bold text-sm">{getClubName(item.clubId)}</p> 
                                 <p className="text-[10px] text-gray-500">{new Date(item.timestamp || Date.now()).toLocaleDateString()}</p>
                             </div>
                         </div>
@@ -1456,11 +1626,11 @@ const StudentDashboard = ({ user, activeTab, onLogout, addNotification }: { user
         const isApproved = e.status === EventStatus.APPROVED;
         const matchesSearch = e.title.toLowerCase().includes(searchQuery.toLowerCase());
         const isUpcoming = new Date(e.date + 'T' + e.time) >= new Date();
-        const matchesCategory = filterCategory === "All" || e.tags.includes(filterCategory);
+        const matchesCategory = filterCategory === "All" || e.category === filterCategory;
         return isApproved && matchesSearch && isUpcoming && matchesCategory;
     });
 
-    const categories = ["All", "Tech", "Cultural", "Sports", "Workshop", "Seminar"];
+    const categories = ["All", ...Object.values(EventCategory)];
 
     return (
         <div className="space-y-6">
@@ -1590,6 +1760,9 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout, addNotification }: {
     const [isEditClubOpen, setIsEditClubOpen] = useState(false);
     const [editingClubId, setEditingClubId] = useState<string | null>(null);
     const [clubForm, setClubForm] = useState({ name: '', description: '', logo: '', banner: '' });
+    const [rejectModalOpen, setRejectModalOpen] = useState(false);
+    const [rejectingEventId, setRejectingEventId] = useState<string | null>(null);
+    const [rejectLoading, setRejectLoading] = useState(false);
     const [adminForm, setAdminForm] = useState({ id: '', name: '', email: '', password: '' });
     const [viewingEvent, setViewingEvent] = useState<Event | null>(null);
     const [manageVolunteers, setManageVolunteers] = useState<VolunteerApplication[]>([]);
@@ -1613,15 +1786,28 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout, addNotification }: {
         }
     };
 
-    const handleReject = async (id: string) => {
-        const reason = prompt("Enter rejection reason:");
-        if (!reason) return;
-        await api.events.updateStatus(id, EventStatus.REJECTED, reason);
-        setEvents(events.map(e => e.id === id ? { ...e, status: EventStatus.REJECTED, rejectionReason: reason } : e));
-        const event = events.find(e => e.id === id);
-        if (event) {
-             const club = clubs.find(c => c.id === event.clubId);
-             if (club) addNotification(club.adminId, "Event Rejected", `Your event "${event.title}" was rejected by College Admin: ${reason}`, 'error');
+    const handleReject = (id: string) => {
+        setRejectingEventId(id);
+        setRejectModalOpen(true);
+    };
+
+    const confirmReject = async (reason: string) => {
+        if (!rejectingEventId) return;
+        setRejectLoading(true);
+        try {
+            await api.events.updateStatus(rejectingEventId, EventStatus.REJECTED, reason);
+            setEvents(events.map(e => e.id === rejectingEventId ? { ...e, status: EventStatus.REJECTED, rejectionReason: reason } : e));
+            const event = events.find(e => e.id === rejectingEventId);
+            if (event) {
+                 const club = clubs.find(c => c.id === event.clubId);
+                 if (club) addNotification(club.adminId, "Event Rejected", `Your event "${event.title}" was rejected by College Admin: ${reason}`, 'error');
+            }
+            setRejectModalOpen(false);
+            setRejectingEventId(null);
+        } catch (e) {
+            alert("Failed to reject event");
+        } finally {
+            setRejectLoading(false);
         }
     };
 
@@ -1883,6 +2069,12 @@ const CollegeAdminDashboard = ({ user, activeTab, onLogout, addNotification }: {
                 registeredUsers={manageRegisteredUsers}
                 onUpdateVolunteerStatus={handleUpdateVolunteer}
             />
+            <RejectionModal 
+                isOpen={rejectModalOpen} 
+                onClose={() => setRejectModalOpen(false)} 
+                onConfirm={confirmReject} 
+                loading={rejectLoading} 
+            />
         </div>
     );
 };
@@ -1892,6 +2084,9 @@ const VenueManagerDashboard = ({ user, activeTab, onLogout, addNotification }: {
     const [showProfileEdit, setShowProfileEdit] = useState(false);
     const [currentUser, setCurrentUser] = useState(user);
     const [venues, setVenues] = useState<Venue[]>([]);
+    const [rejectModalOpen, setRejectModalOpen] = useState(false);
+    const [rejectingEventId, setRejectingEventId] = useState<string | null>(null);
+    const [rejectLoading, setRejectLoading] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -1929,11 +2124,24 @@ const VenueManagerDashboard = ({ user, activeTab, onLogout, addNotification }: {
         addNotification(user.id, "Event Approved", `You approved "${eventToApprove.title}" for your venue.`, 'success');
     };
 
-    const handleReject = async (id: string) => {
-        const reason = prompt("Enter rejection reason:");
-        if (!reason) return;
-        await api.events.updateStatus(id, EventStatus.REJECTED, reason);
-        setEvents(events.map(e => e.id === id ? { ...e, status: EventStatus.REJECTED, rejectionReason: reason } : e));
+    const handleReject = (id: string) => {
+        setRejectingEventId(id);
+        setRejectModalOpen(true);
+    };
+
+    const confirmReject = async (reason: string) => {
+        if (!rejectingEventId) return;
+        setRejectLoading(true);
+        try {
+            await api.events.updateStatus(rejectingEventId, EventStatus.REJECTED, reason);
+            setEvents(events.map(e => e.id === rejectingEventId ? { ...e, status: EventStatus.REJECTED, rejectionReason: reason } : e));
+            setRejectModalOpen(false);
+            setRejectingEventId(null);
+        } catch (e) {
+            alert("Failed to reject event");
+        } finally {
+            setRejectLoading(false);
+        }
     };
 
     const handleUpdateProfile = async (data: Partial<User>) => {
@@ -2005,6 +2213,12 @@ const VenueManagerDashboard = ({ user, activeTab, onLogout, addNotification }: {
                 <ProfileView user={currentUser} onEdit={() => setShowProfileEdit(true)} onLogout={onLogout} />
             )}
             <EditProfileModal isOpen={showProfileEdit} onClose={() => setShowProfileEdit(false)} user={currentUser} onUpdate={handleUpdateProfile} />
+            <RejectionModal 
+                isOpen={rejectModalOpen} 
+                onClose={() => setRejectModalOpen(false)} 
+                onConfirm={confirmReject} 
+                loading={rejectLoading} 
+            />
         </div>
     );
 };
@@ -2231,6 +2445,16 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout, addNotific
             alert("Failed to generate certificate design.");
         }
         setGeneratingCert(false);
+    };
+
+    const handleSaveCertificateTemplate = async () => {
+        if (!certDesignEvent || !certDesignImage) return;
+        const updatedEvent = { ...certDesignEvent, certificateTemplate: certDesignImage };
+        await api.events.update(updatedEvent);
+        setEvents(events.map(e => e.id === updatedEvent.id ? updatedEvent : e));
+        alert("Template Saved!");
+        setCertDesignEvent(null);
+        setCertDesignImage(null);
     };
 
     const handleOpenEventManagement = async (event: Event) => {
@@ -2577,7 +2801,20 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout, addNotific
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-6">
+                    <div className="grid grid-cols-2 gap-6">
+                     <div>
+                      <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Category</label>
+                      <select 
+                        className="w-full p-3 border-2 border-gray-200 focus:border-black focus:outline-none bg-white font-medium text-black"
+                        value={newProposal.category || ''}
+                        onChange={e => setNewProposal({...newProposal, category: e.target.value as EventCategory})}
+                      >
+                        <option value="">Select Category</option>
+                        {Object.values(EventCategory).map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
                      <div>
                       <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Venue Preference</label>
                       <select 
@@ -2766,7 +3003,7 @@ const ClubAdminDashboard = ({ user, refreshData, activeTab, onLogout, addNotific
                         {generatingCert ? <Loader2 className="animate-spin" /> : <><Sparkles size={18} /> Generate AI Design</>}
                     </button>
                     <button 
-                        onClick={() => { alert("Template Saved!"); setCertDesignEvent(null); }}
+                        onClick={handleSaveCertificateTemplate}
                         disabled={!certDesignImage}
                         className="flex-1 bg-yellow-400 text-black py-3 font-bold uppercase hover:bg-yellow-500 disabled:opacity-50"
                     >
@@ -2895,6 +3132,7 @@ const LoginPage = ({ onLogin, onSwitchToSignup }: { onLogin: (u: User) => void, 
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [showForgot, setShowForgot] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -2926,12 +3164,21 @@ const LoginPage = ({ onLogin, onSwitchToSignup }: { onLogin: (u: User) => void, 
                     </div>
                     <div>
                         <label className="block text-xs font-bold uppercase mb-1">Password</label>
-                        <input 
-                            type="password"
-                            className="w-full border-2 border-black p-3 font-bold focus:outline-none focus:bg-yellow-50 text-black"
-                            value={password}
-                            onChange={e => setPassword(e.target.value)}
-                        />
+                        <div className="relative">
+                            <input 
+                                type={showPassword ? "text" : "password"}
+                                className="w-full border-2 border-black p-3 font-bold focus:outline-none focus:bg-yellow-50 text-black pr-10"
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                            />
+                            <button 
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-black"
+                            >
+                                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                            </button>
+                        </div>
                         <div className="text-right mt-1">
                             <button type="button" onClick={() => setShowForgot(true)} className="text-xs font-bold underline text-gray-500 hover:text-black">Forgot Password?</button>
                         </div>
@@ -2958,6 +3205,7 @@ const SignupPage = ({ onSignup, onSwitchToLogin }: { onSignup: (u: User) => void
     const [branch, setBranch] = useState('CSE');
     const [avatar, setAvatar] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -3050,13 +3298,22 @@ const SignupPage = ({ onSignup, onSwitchToLogin }: { onSignup: (u: User) => void
 
                     <div>
                         <label className="block text-xs font-bold uppercase mb-1">Password</label>
-                        <input 
-                            required
-                            type="password"
-                            className="w-full border-2 border-black p-3 font-bold focus:outline-none focus:bg-yellow-50 text-black"
-                            value={password}
-                            onChange={e => setPassword(e.target.value)}
-                        />
+                        <div className="relative">
+                            <input 
+                                required
+                                type={showPassword ? "text" : "password"}
+                                className="w-full border-2 border-black p-3 font-bold focus:outline-none focus:bg-yellow-50 text-black pr-10"
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                            />
+                            <button 
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-black"
+                            >
+                                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                            </button>
+                        </div>
                     </div>
                     <button disabled={loading} className="w-full bg-yellow-400 text-black py-4 font-black uppercase hover:bg-yellow-500 transition border-2 border-black">
                         {loading ? <Loader2 className="animate-spin mx-auto"/> : 'Create Account'}

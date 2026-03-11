@@ -28,6 +28,7 @@ export interface User {
   avatar?: string;
   clubId?: string; // If club admin
   venueId?: string; // If venue manager
+  managedVenueId?: string;
   bio?: string;
   joinDate?: string;
   joinedClubIds?: string[];
@@ -65,6 +66,15 @@ export interface Winner {
   photo: string; // Base64 or URL
 }
 
+export enum EventCategory {
+  ACADEMIC = 'Academic',
+  CULTURAL = 'Cultural',
+  SPORTS = 'Sports',
+  WORKSHOP = 'Workshop',
+  SEMINAR = 'Seminar',
+  OTHER = 'Other'
+}
+
 export interface Event {
   id: string;
   title: string;
@@ -80,9 +90,11 @@ export interface Event {
   image?: string;
   tags: string[];
   price: number; // 0 for free
+  category?: EventCategory;
   feedback?: Feedback[];
   volunteersNeeded?: boolean;
   certificatesIssued?: boolean;
+  certificateTemplate?: string;
   winners?: Winner[];
   rejectionReason?: string;
 }
@@ -152,5 +164,5 @@ export interface Notification {
   message: string;
   timestamp: string;
   read: boolean;
-  type: 'system' | 'event' | 'club';
+  type: 'system' | 'event' | 'club' | 'success' | 'error' | 'info' | 'warning';
 }

@@ -93,6 +93,15 @@ export const api = {
             .eq('userId', userId);
         if (error) return [];
         return data.map((r: any) => r.eventId);
+    },
+    getAttendedEvents: async (userId: string): Promise<string[]> => {
+        const { data, error } = await supabase
+            .from('registrations')
+            .select('eventId')
+            .eq('userId', userId)
+            .eq('attended', true);
+        if (error) return [];
+        return data.map((r: any) => r.eventId);
     }
   },
   admin: {
@@ -193,6 +202,16 @@ export const api = {
         if (userError) throw new Error(userError.message);
         return users || [];
     },
+    getAttendedUsers: async (eventId: string): Promise<string[]> => {
+        const { data: regs, error } = await supabase
+            .from('registrations')
+            .select('userId')
+            .eq('eventId', eventId)
+            .eq('attended', true);
+        
+        if (error) throw new Error(error.message);
+        return regs ? regs.map((r: any) => r.userId) : [];
+    },
     addFeedback: async (eventId: string, feedback: Feedback): Promise<void> => {
         const { data: event } = await supabase.from('events').select('feedback').eq('id', eventId).single();
         const currentFeedback = event?.feedback || [];
@@ -201,6 +220,14 @@ export const api = {
             .from('events')
             .update({ feedback: [...currentFeedback, feedback] })
             .eq('id', eventId);
+    },
+    markAttended: async (eventId: string, userId: string): Promise<void> => {
+        const { error } = await supabase
+            .from('registrations')
+            .update({ attended: true })
+            .eq('eventId', eventId)
+            .eq('userId', userId);
+        if (error) throw new Error(error.message);
     },
     issueCertificates: async (eventId: string): Promise<void> => {
         await supabase.from('events').update({ certificatesIssued: true, status: 'COMPLETED' }).eq('id', eventId);

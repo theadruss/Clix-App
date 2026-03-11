@@ -35,7 +35,7 @@ export const generateEventContent = async (topic: string, type: 'description' | 
   }
 };
 
-export const generateEventReport = async (title: string, stats: any, feedback: any[]) => {
+export const generateEventReport = async (title: string, stats: any, feedback: any[], mediaUrls: string[] = []) => {
   if (!process.env.API_KEY) return "API Key missing.";
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const model = "gemini-3-flash-preview";
@@ -54,12 +54,22 @@ export const generateEventReport = async (title: string, stats: any, feedback: a
   1. Executive Summary
   2. Participation & Engagement Analysis
   3. Feedback Highlights
+  4. Event Gallery (I will append images here)
 
   IMPORTANT: Do not use placeholders like [Insert Date] or fill-in-the-blanks. Use the provided data. If data is missing, make a reasonable professional assumption or omit the specific detail. Do not use asterisks for bolding, use standard Markdown headers. The tone should be formal and objective.`;
 
   try {
     const response = await ai.models.generateContent({ model, contents: prompt });
-    return response.text;
+    let report = response.text || "";
+    
+    if (mediaUrls && mediaUrls.length > 0) {
+        report += "\n\n## Event Gallery\n";
+        mediaUrls.forEach(url => {
+            report += `![Event Image](${url})\n`;
+        });
+    }
+    
+    return report;
   } catch (e) {
     console.error(e);
     return "Error generating report. Please try again.";

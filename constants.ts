@@ -180,7 +180,7 @@ export const INITIAL_EVENTS: Event[] = [
     date: '2024-06-01',
     time: '14:00',
     venueId: 'v2',
-    status: EventStatus.PENDING_VENUE, // Pending Venue Approval
+    status: EventStatus.PENDING, // Pending Venue Approval
     capacity: 50,
     registeredCount: 0,
     image: 'https://picsum.photos/800/400?random=12',
